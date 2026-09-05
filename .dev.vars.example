@@ -1,0 +1,5 @@
+# cp .dev.vars.example .dev.vars 후 아래 예제 값을 로컬 전용 난수로 바꾼다.
+# 로컬 turso dev 서버(기본 http://127.0.0.1:8080)는 인증이 없으므로 TURSO_AUTH_TOKEN은 비워둔다.
+TURSO_DATABASE_URL=http://127.0.0.1:8080
+TURSO_AUTH_TOKEN=
+ADMIN_TOKEN=REPLACE_WITH_LOCAL_RANDOM_TOKEN
