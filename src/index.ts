@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 
 import { ADMIN_DASHBOARD_HTML } from "./admin-ui";
+import { CHART_JS_SOURCE } from "./chart-vendor";
 import { createDatabase } from "./db";
 import { errorResponse } from "./errors";
 import adminStats from "./routes/admin-stats";
@@ -78,6 +79,14 @@ app.use("/v1/admin/*", async (context, next) => {
 
 app.get("/health", (context) => context.json({ service: "radio-stats" }));
 app.get("/admin", (context) => context.html(ADMIN_DASHBOARD_HTML));
+// cdnjs 같은 외부 CDN에 기대지 않고 같은 origin에서 직접 서빙한다 — 광고 차단기/콘텐츠
+// 차단 기능이 제3자 CDN 요청을 막아도 대시보드 차트가 계속 뜨게 하기 위함이다.
+app.get("/admin/vendor/chart.js", (context) =>
+  context.newResponse(CHART_JS_SOURCE, 200, {
+    "Content-Type": "application/javascript; charset=utf-8",
+    "Cache-Control": "public, max-age=31536000, immutable",
+  }),
+);
 app.route("/v1/events", events);
 app.route("/v1/admin/stats", adminStats);
 
