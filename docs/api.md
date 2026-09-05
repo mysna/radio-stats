@@ -41,9 +41,19 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 채널 재생을 시작할 때(최초 재생, 채널 전환) 호출한다.
 
 ```json
-{ "visitor_id": "<uuid>", "visit_id": "<uuid>", "channel_id": "kbs.1radio.seoul" }
+{
+  "visitor_id": "<uuid>",
+  "visit_id": "<uuid>",
+  "channel_id": "kbs.1radio.seoul",
+  "broadcaster": "kbs",
+  "region_id": "seoul",
+  "program_id": "kbs.news.0900",
+  "program_title": "KBS 뉴스"
+}
 ```
 
+- `broadcaster`/`region_id`/`program_id`/`program_title`은 모두 선택 필드. 방송국별/
+  채널별/지역별/프로그램별 통계에 쓰인다.
 - 응답 `201`: `{ "session_id": "<uuid>" }`.
 
 ### `POST /v1/events/listen/heartbeat`
@@ -52,15 +62,18 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 주기를 권장한다 — 하트비트 간격이 벌어질수록 실제 청취 시간과의 오차가 커진다.
 
 ```json
-{ "session_id": "<uuid>" }
+{ "session_id": "<uuid>", "program_id": "kbs.news.0900", "program_title": "KBS 뉴스" }
 ```
+
+- `program_id`/`program_title`은 선택이며, 재생 도중 프로그램이 바뀌면 매 하트비트마다
+  그 시점의 값을 실어 보낸다 — 그 하트비트가 담당하는 경과 시간이 이 프로그램에 집계된다.
 
 ### `POST /v1/events/listen/end`
 
 일시정지, 채널 전환, 탭 종료 시 호출한다(`sendBeacon` 권장).
 
 ```json
-{ "session_id": "<uuid>" }
+{ "session_id": "<uuid>", "program_id": "kbs.news.0900", "program_title": "KBS 뉴스" }
 ```
 
 - 이미 종료된 세션에 다시 호출해도 안전하다(중복 집계하지 않고 `{"status":"already_ended"}` 반환).
@@ -105,6 +118,35 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
     }
   ]
 }
+```
+
+### `GET /v1/admin/stats/by-broadcaster`
+
+방송국(`broadcaster`, 예: kbs/mbc/sbs)별 누적 청취 시간, 내림차순.
+
+```json
+{ "broadcasters": [{ "broadcaster": "kbs", "seconds": 12345 }, ...] }
+```
+
+### `GET /v1/admin/stats/by-channel?limit=50`
+
+채널(`channel_id`)별 누적 청취 시간(전체 기간), 내림차순.
+
+### `GET /v1/admin/stats/by-region`
+
+`region_id`를 수도권/지역 두 그룹으로만 묶은 누적 청취 시간.
+
+```json
+{ "regions": [{ "region_group": "수도권", "seconds": 12345 }, { "region_group": "지역", "seconds": 6789 }] }
+```
+
+### `GET /v1/admin/stats/by-program?limit=50`
+
+채널×프로그램별 누적 청취 시간, 내림차순. `program_id`가 없는 구간은
+`program_key: "unknown"`으로 묶인다.
+
+```json
+{ "programs": [{ "channel_id": "kbs.1radio.seoul", "program_key": "kbs.news.0900", "program_title": "KBS 뉴스", "seconds": 3600 }] }
 ```
 
 ### `GET /v1/admin/stats/daily?days=30`

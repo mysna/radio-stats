@@ -113,7 +113,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
   .bar-label { width: 40%; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar-track { flex: 1; background: var(--gridline); border-radius: 4px; height: 16px; overflow: hidden; }
   .bar-fill { background: var(--accent); height: 100%; border-radius: 4px; }
-  .bar-count { width: 32px; text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .bar-count { min-width: 32px; text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
   .daily-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
   .daily-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
@@ -166,10 +166,30 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     </section>
 
     <section class="panel">
+      <h2>방송국별 누적 청취 시간</h2>
+      <div id="byBroadcaster"></div>
+    </section>
+
+    <section class="panel">
+      <h2>채널별 누적 청취 시간</h2>
+      <div id="byChannel"></div>
+    </section>
+
+    <section class="panel">
+      <h2>지역별 누적 청취 시간 (수도권 vs 지역)</h2>
+      <div id="byRegion"></div>
+    </section>
+
+    <section class="panel">
+      <h2>프로그램 TOP</h2>
+      <div id="byProgram"></div>
+    </section>
+
+    <section class="panel">
       <h2>실시간 접속 세션</h2>
       <div class="table-wrap">
         <table id="liveTable">
-          <thead><tr><th>채널</th><th>국가</th><th>브라우저</th><th>OS</th><th>기기</th><th>경과</th></tr></thead>
+          <thead><tr><th>채널</th><th>프로그램</th><th>국가</th><th>브라우저</th><th>OS</th><th>기기</th><th>경과</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -309,23 +329,25 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     });
   }
 
-  function renderLiveChannels(byChannel) {
-    var container = document.getElementById("liveChannels");
+  // rows: [{ label, value }], formatValue(value) -> 표시할 텍스트. containerId 안에 막대 목록을 그린다.
+  function renderBarList(containerId, rows, emptyMessage, formatValue) {
+    var container = document.getElementById(containerId);
     clearNode(container);
-    if (!byChannel.length) {
-      container.appendChild(el("div", "empty", "지금 듣고 있는 사람이 없습니다."));
+    if (!rows.length) {
+      container.appendChild(el("div", "empty", emptyMessage));
       return;
     }
-    var max = byChannel.reduce(function (acc, row) { return Math.max(acc, row.listeners); }, 1);
-    byChannel.forEach(function (row) {
+    var format = formatValue || function (value) { return String(value); };
+    var max = rows.reduce(function (acc, row) { return Math.max(acc, row.value); }, 1);
+    rows.forEach(function (row) {
       var wrap = el("div", "bar-row");
-      wrap.appendChild(el("div", "bar-label", row.channel_id));
+      wrap.appendChild(el("div", "bar-label", row.label));
       var track = el("div", "bar-track");
       var fill = el("div", "bar-fill");
-      fill.style.width = Math.max(4, Math.round((row.listeners / max) * 100)) + "%";
+      fill.style.width = Math.max(4, Math.round((row.value / max) * 100)) + "%";
       track.appendChild(fill);
       wrap.appendChild(track);
-      wrap.appendChild(el("div", "bar-count", String(row.listeners)));
+      wrap.appendChild(el("div", "bar-count", format(row.value)));
       container.appendChild(wrap);
     });
   }
@@ -356,7 +378,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     if (!sessions.length) {
       var emptyRow = el("tr");
       var emptyCell = el("td", "empty", "실시간 접속이 없습니다.");
-      emptyCell.colSpan = 6;
+      emptyCell.colSpan = 7;
       emptyRow.appendChild(emptyCell);
       tbody.appendChild(emptyRow);
       return;
@@ -364,6 +386,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     sessions.forEach(function (session) {
       var row = el("tr");
       row.appendChild(el("td", null, session.channel_id));
+      row.appendChild(el("td", null, session.program_title || "-"));
       row.appendChild(el("td", null, session.country || "-"));
       row.appendChild(el("td", null, session.browser || "-"));
       row.appendChild(el("td", null, session.os || "-"));
@@ -460,12 +483,46 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
       authFetch("/v1/admin/stats/live"),
       authFetch("/v1/admin/stats/daily?days=30"),
       authFetch("/v1/admin/stats/visitors?limit=50"),
+      authFetch("/v1/admin/stats/by-broadcaster"),
+      authFetch("/v1/admin/stats/by-channel?limit=20"),
+      authFetch("/v1/admin/stats/by-region"),
+      authFetch("/v1/admin/stats/by-program?limit=20"),
     ]).then(function (results) {
       renderTiles(results[0]);
-      renderLiveChannels(results[1].by_channel || []);
+      renderBarList(
+        "liveChannels",
+        (results[1].by_channel || []).map(function (row) { return { label: row.channel_id, value: row.listeners }; }),
+        "지금 듣고 있는 사람이 없습니다.",
+      );
       renderLiveTable(results[1].sessions || []);
       renderDailyChart(results[2].days || []);
       renderVisitorsTable(results[3].visitors || []);
+      renderBarList(
+        "byBroadcaster",
+        (results[4].broadcasters || []).map(function (row) { return { label: row.broadcaster, value: row.seconds }; }),
+        "데이터가 아직 없습니다.",
+        formatHours,
+      );
+      renderBarList(
+        "byChannel",
+        (results[5].channels || []).map(function (row) { return { label: row.channel_id, value: row.seconds }; }),
+        "데이터가 아직 없습니다.",
+        formatHours,
+      );
+      renderBarList(
+        "byRegion",
+        (results[6].regions || []).map(function (row) { return { label: row.region_group, value: row.seconds }; }),
+        "데이터가 아직 없습니다.",
+        formatHours,
+      );
+      renderBarList(
+        "byProgram",
+        (results[7].programs || []).map(function (row) {
+          return { label: (row.program_title || "제목 없음") + " · " + row.channel_id, value: row.seconds };
+        }),
+        "데이터가 아직 없습니다.",
+        formatHours,
+      );
       updatedAt.textContent = "업데이트: " + new Date().toLocaleTimeString("ko-KR");
     });
   }

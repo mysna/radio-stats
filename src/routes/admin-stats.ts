@@ -100,6 +100,68 @@ adminStats.get("/daily", async (context) => {
   return context.json({ days: rows.results });
 });
 
+adminStats.get("/by-broadcaster", async (context) => {
+  const db = context.get("db");
+  const rows = await db
+    .prepare(
+      `SELECT broadcaster, SUM(seconds) AS seconds
+       FROM visitor_daily_listen
+       WHERE broadcaster IS NOT NULL
+       GROUP BY broadcaster
+       ORDER BY seconds DESC`,
+    )
+    .all<{ broadcaster: string; seconds: number }>();
+  return context.json({ broadcasters: rows.results });
+});
+
+adminStats.get("/by-channel", async (context) => {
+  const db = context.get("db");
+  const limit = Math.min(Math.max(Number(context.req.query("limit")) || DEFAULT_VISITOR_LIST_LIMIT, 1), MAX_VISITOR_LIST_LIMIT);
+  const rows = await db
+    .prepare(
+      `SELECT channel_id, SUM(seconds) AS seconds
+       FROM visitor_daily_listen
+       GROUP BY channel_id
+       ORDER BY seconds DESC
+       LIMIT ?`,
+    )
+    .bind(limit)
+    .all<{ channel_id: string; seconds: number }>();
+  return context.json({ channels: rows.results });
+});
+
+adminStats.get("/by-region", async (context) => {
+  const db = context.get("db");
+  // 세부 지역(수도권/부산·울산·경남/...) 대신 요청받은 두 그룹(수도권 vs 지역)으로만 묶는다.
+  const rows = await db
+    .prepare(
+      `SELECT CASE WHEN region_id = 'seoul' THEN '수도권' ELSE '지역' END AS region_group,
+              SUM(seconds) AS seconds
+       FROM visitor_daily_listen
+       WHERE region_id IS NOT NULL
+       GROUP BY region_group
+       ORDER BY seconds DESC`,
+    )
+    .all<{ region_group: string; seconds: number }>();
+  return context.json({ regions: rows.results });
+});
+
+adminStats.get("/by-program", async (context) => {
+  const db = context.get("db");
+  const limit = Math.min(Math.max(Number(context.req.query("limit")) || DEFAULT_VISITOR_LIST_LIMIT, 1), MAX_VISITOR_LIST_LIMIT);
+  const rows = await db
+    .prepare(
+      `SELECT channel_id, program_key, MAX(program_title) AS program_title, SUM(seconds) AS seconds
+       FROM program_daily_listen
+       GROUP BY channel_id, program_key
+       ORDER BY seconds DESC
+       LIMIT ?`,
+    )
+    .bind(limit)
+    .all<{ channel_id: string; program_key: string; program_title: string | null; seconds: number }>();
+  return context.json({ programs: rows.results });
+});
+
 interface LiveSessionRow {
   session_id: string;
   visitor_id: string;
@@ -110,6 +172,9 @@ interface LiveSessionRow {
   browser: string | null;
   os: string | null;
   device_type: string | null;
+  broadcaster: string | null;
+  region_id: string | null;
+  program_title: string | null;
 }
 
 adminStats.get("/live", async (context) => {
@@ -132,6 +197,7 @@ adminStats.get("/live", async (context) => {
       .prepare(
         `SELECT
            ls.id AS session_id, ls.visitor_id, ls.channel_id, ls.started_at, ls.duration_seconds,
+           ls.broadcaster, ls.region_id, ls.program_title,
            v.country, v.browser, v.os, v.device_type
          FROM listen_sessions ls
          JOIN visitors v ON v.id = ls.visitor_id
