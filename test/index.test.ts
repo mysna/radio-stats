@@ -21,6 +21,16 @@ describe("GET /admin", () => {
   });
 });
 
+describe("GET /admin/vendor/chart.js", () => {
+  it("는 Chart.js를 같은 origin에서 직접 서빙한다(외부 CDN 의존 없음)", async () => {
+    const response = await app.request("https://api.example.test/admin/vendor/chart.js", undefined, {});
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("javascript");
+    expect(body.length).toBeGreaterThan(100_000);
+  });
+});
+
 describe("admin API CORS", () => {
   it("는 어떤 origin이든 허용하되 Authorization 없이는 401을 반환한다", async () => {
     const response = await app.request(

@@ -6,7 +6,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>라디오 통계 대시보드</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="/admin/vendor/chart.js"></script>
 <style>
   :root {
     color-scheme: light;

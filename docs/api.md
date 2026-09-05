@@ -214,7 +214,9 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 탭을 전환하면 그 탭에 필요한 API만 새로 불러온다(홈을 보는 동안엔 채널 분석 API를
 호출하지 않는다). 15초마다 지금 보고 있는 탭만 자동 새로고침된다.
 
-차트는 [Chart.js](https://www.chartjs.org/)를 cdnjs에서 `<script>` 태그로 불러와
-그린다(빌드 과정 없음). 오프라인이거나 cdnjs가 막힌 네트워크에서는 차트 대신
-"Chart is not defined" 콘솔 에러와 함께 그 부분만 비어 보인다 — 통계 타일과 표는
-이 스크립트에 의존하지 않으므로 정상 동작한다.
+차트는 [Chart.js](https://www.chartjs.org/)로 그린다. cdnjs 같은 외부 CDN에서 불러오지
+않고 `GET /admin/vendor/chart.js`로 같은 origin에서 직접 서빙한다 — 광고 차단기나
+콘텐츠 차단 기능이 제3자 CDN 요청을 막으면 차트만 조용히 빈 화면이 되는 문제가 실제로
+있었기 때문이다. `chart-vendor.ts`는 `scripts/generate-chart-vendor.mjs`가
+`node_modules/chart.js`에서 생성하는 자동 생성 파일이라 직접 고치지 않는다(chart.js
+버전을 올릴 때 `npm install chart.js@<version>` 후 다시 실행해서 커밋한다).
