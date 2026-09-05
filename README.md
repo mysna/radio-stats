@@ -82,6 +82,26 @@ npx wrangler deploy
 비밀을 담을 수 없으므로, `wrangler.toml`의 `CORS_ORIGINS`(허용 origin 목록)만으로
 보호한다. `radio-epg`처럼 운영 origin과 필요한 로컬 origin만 정확히 지정한다.
 
+## 마이그레이션 자동 적용 (GitHub Actions)
+
+`.github/workflows/migrate.yml`이 `migrations/`가 바뀐 채로 `main`에 푸시될 때마다
+자동으로 `npm run db:migrate`를 돌려 운영 Turso DB에 반영한다. Worker 배포 자체는
+Cloudflare의 Git 연동(Workers Builds)이 그대로 담당하고, 이 workflow는 그 배포가
+새 컬럼/테이블을 참조하는 코드를 마이그레이션 없이 만나 실패하는 일(예: 컬럼이나
+테이블이 없어서 나는 오류)을 막기 위한 것이다.
+
+동작하려면 GitHub 저장소 Settings → Secrets and variables → Actions에 아래 두 개를
+등록해야 한다(둘 다 로컬 `.dev.vars`/`wrangler.toml`이 아니라 GitHub 쪽에 별도로
+등록하는 값이다).
+
+- **Variables** 탭 → `TURSO_DATABASE_URL` = `turso db show radio-stats --url` 결과
+  (비밀값 아님)
+- **Secrets** 탭 → `TURSO_AUTH_TOKEN` = `turso db tokens create radio-stats` 결과
+
+두 값 모두 Cloudflare Worker secret으로 등록할 때 쓴 것과 같은 값을 그대로 쓰면 된다.
+등록 후에는 이 저장소에 마이그레이션 파일을 추가해 `main`에 푸시하기만 하면 별도로
+손대지 않아도 운영 DB에 반영된다.
+
 ## radio(플레이어) 연동
 
 `radio` 저장소의 클라이언트가 이 API의 `/v1/events/*`를 호출해 방문/청취 이벤트를
