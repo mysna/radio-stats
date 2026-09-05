@@ -1,0 +1,36 @@
+name: Apply Turso migrations
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - "migrations/**"
+      - "package-lock.json"
+      - ".github/workflows/migrate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radio-stats-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-24.04
+    env:
+      TURSO_DATABASE_URL: ${{ vars.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.8.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Apply Turso migrations
+        run: npm run db:migrate
