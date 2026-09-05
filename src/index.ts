@@ -78,7 +78,11 @@ app.use("/v1/admin/*", async (context, next) => {
 });
 
 app.get("/health", (context) => context.json({ service: "radio-stats" }));
-app.get("/admin", (context) => context.html(ADMIN_DASHBOARD_HTML));
+// 배포 후에도 브라우저(특히 사파리)가 이전 버전 HTML을 캐시해서 계속 보여주는 문제를
+// 막기 위해 캐시를 금지한다 — 이 페이지는 자주 안 열리고 크기도 작아 캐시 이득이 없다.
+app.get("/admin", (context) =>
+  context.html(ADMIN_DASHBOARD_HTML, 200, { "Cache-Control": "no-store" }),
+);
 // cdnjs 같은 외부 CDN에 기대지 않고 같은 origin에서 직접 서빙한다 — 광고 차단기/콘텐츠
 // 차단 기능이 제3자 CDN 요청을 막아도 대시보드 차트가 계속 뜨게 하기 위함이다.
 app.get("/admin/vendor/chart.js", (context) =>
