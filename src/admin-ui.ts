@@ -115,6 +115,15 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
   .bar-fill { background: var(--accent); height: 100%; border-radius: 4px; }
   .bar-count { min-width: 32px; text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
+  .error-banner {
+    background: rgba(208, 59, 59, 0.12);
+    border: 1px solid #d03b3b;
+    color: #d03b3b;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
   .daily-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
   .daily-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
   .daily-bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
@@ -152,6 +161,8 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
         <button id="logoutBtn" class="secondary" type="button">토큰 지우기</button>
       </div>
     </header>
+
+    <p id="dashboardError" class="error-banner" hidden></p>
 
     <section class="tiles" id="tiles"></section>
 
@@ -220,7 +231,18 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
   var tokenInput = document.getElementById("tokenInput");
   var dashboard = document.getElementById("dashboard");
   var updatedAt = document.getElementById("updatedAt");
+  var dashboardError = document.getElementById("dashboardError");
   var refreshTimer = null;
+
+  function showDashboardError(message) {
+    dashboardError.textContent = message;
+    dashboardError.hidden = false;
+  }
+
+  function clearDashboardError() {
+    dashboardError.hidden = true;
+    dashboardError.textContent = "";
+  }
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -282,7 +304,12 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
         throw new Error("unauthorized");
       }
       if (!response.ok) {
-        throw new Error("request failed: " + response.status);
+        return response
+          .text()
+          .catch(function () { return ""; })
+          .then(function (body) {
+            throw new Error(path + " -> " + response.status + (body ? " " + body.slice(0, 200) : ""));
+          });
       }
       return response.json();
     });
@@ -483,53 +510,84 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     });
   }
 
+  // 요청 하나가 실패해도(예: 새로 추가한 엔드포인트 하나만 오류) 나머지는 정상적으로
+  // 그려지도록 Promise.all 대신 allSettled를 쓴다 — 전부-아니면-전무로 묶여 있으면
+  // 실패 이유를 알 방법 없이 화면 전체가 조용히 비어버린다.
   function loadAll() {
-    return Promise.all([
-      authFetch("/v1/admin/stats/summary"),
-      authFetch("/v1/admin/stats/live"),
-      authFetch("/v1/admin/stats/daily?days=30"),
-      authFetch("/v1/admin/stats/visitors?limit=50"),
-      authFetch("/v1/admin/stats/by-broadcaster"),
-      authFetch("/v1/admin/stats/by-channel?limit=20"),
-      authFetch("/v1/admin/stats/by-region"),
-      authFetch("/v1/admin/stats/by-program?limit=20"),
-    ]).then(function (results) {
-      renderTiles(results[0]);
-      renderBarList(
-        "liveChannels",
-        (results[1].by_channel || []).map(function (row) { return { label: channelLabel(row), value: row.listeners }; }),
-        "지금 듣고 있는 사람이 없습니다.",
-      );
-      renderLiveTable(results[1].sessions || []);
-      renderDailyChart(results[2].days || []);
-      renderVisitorsTable(results[3].visitors || []);
-      renderBarList(
-        "byBroadcaster",
-        (results[4].broadcasters || []).map(function (row) { return { label: row.broadcaster, value: row.seconds }; }),
-        "데이터가 아직 없습니다.",
-        formatHours,
-      );
-      renderBarList(
-        "byChannel",
-        (results[5].channels || []).map(function (row) { return { label: channelLabel(row), value: row.seconds }; }),
-        "데이터가 아직 없습니다.",
-        formatHours,
-      );
-      renderBarList(
-        "byRegion",
-        (results[6].regions || []).map(function (row) { return { label: row.region_group, value: row.seconds }; }),
-        "데이터가 아직 없습니다.",
-        formatHours,
-      );
-      renderBarList(
-        "byProgram",
-        (results[7].programs || []).map(function (row) {
-          return { label: (row.program_title || "제목 없음") + " · " + channelLabel(row), value: row.seconds };
-        }),
-        "데이터가 아직 없습니다.",
-        formatHours,
-      );
+    var requests = [
+      { key: "summary", path: "/v1/admin/stats/summary" },
+      { key: "live", path: "/v1/admin/stats/live" },
+      { key: "daily", path: "/v1/admin/stats/daily?days=30" },
+      { key: "visitors", path: "/v1/admin/stats/visitors?limit=50" },
+      { key: "byBroadcaster", path: "/v1/admin/stats/by-broadcaster" },
+      { key: "byChannel", path: "/v1/admin/stats/by-channel?limit=20" },
+      { key: "byRegion", path: "/v1/admin/stats/by-region" },
+      { key: "byProgram", path: "/v1/admin/stats/by-program?limit=20" },
+    ];
+
+    return Promise.allSettled(requests.map(function (r) { return authFetch(r.path); })).then(function (settled) {
+      var data = {};
+      var errors = [];
+      settled.forEach(function (result, index) {
+        if (result.status === "fulfilled") {
+          data[requests[index].key] = result.value;
+        } else {
+          errors.push(result.reason && result.reason.message ? result.reason.message : String(result.reason));
+        }
+      });
+
+      if (data.summary) renderTiles(data.summary);
+      if (data.live) {
+        renderBarList(
+          "liveChannels",
+          (data.live.by_channel || []).map(function (row) { return { label: channelLabel(row), value: row.listeners }; }),
+          "지금 듣고 있는 사람이 없습니다.",
+        );
+        renderLiveTable(data.live.sessions || []);
+      }
+      if (data.daily) renderDailyChart(data.daily.days || []);
+      if (data.visitors) renderVisitorsTable(data.visitors.visitors || []);
+      if (data.byBroadcaster) {
+        renderBarList(
+          "byBroadcaster",
+          (data.byBroadcaster.broadcasters || []).map(function (row) { return { label: row.broadcaster, value: row.seconds }; }),
+          "데이터가 아직 없습니다.",
+          formatHours,
+        );
+      }
+      if (data.byChannel) {
+        renderBarList(
+          "byChannel",
+          (data.byChannel.channels || []).map(function (row) { return { label: channelLabel(row), value: row.seconds }; }),
+          "데이터가 아직 없습니다.",
+          formatHours,
+        );
+      }
+      if (data.byRegion) {
+        renderBarList(
+          "byRegion",
+          (data.byRegion.regions || []).map(function (row) { return { label: row.region_group, value: row.seconds }; }),
+          "데이터가 아직 없습니다.",
+          formatHours,
+        );
+      }
+      if (data.byProgram) {
+        renderBarList(
+          "byProgram",
+          (data.byProgram.programs || []).map(function (row) {
+            return { label: (row.program_title || "제목 없음") + " · " + channelLabel(row), value: row.seconds };
+          }),
+          "데이터가 아직 없습니다.",
+          formatHours,
+        );
+      }
       updatedAt.textContent = "업데이트: " + new Date().toLocaleTimeString("ko-KR");
+
+      if (errors.length) {
+        showDashboardError("일부 통계를 불러오지 못했습니다 — " + errors.join(" | "));
+      } else {
+        clearDashboardError();
+      }
     });
   }
 
@@ -537,21 +595,13 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(function () {
       if (document.hidden) return;
-      loadAll().catch(function () {
-        // 다음 주기에 다시 시도한다.
-      });
+      loadAll();
     }, AUTO_REFRESH_MS);
   }
 
   function enter() {
     showDashboard();
-    loadAll()
-      .then(startAutoRefresh)
-      .catch(function (error) {
-        if (String(error.message) !== "unauthorized") {
-          showDashboard();
-        }
-      });
+    loadAll().then(startAutoRefresh);
   }
 
   gateForm.addEventListener("submit", function (event) {
@@ -564,7 +614,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
   });
 
   document.getElementById("refreshBtn").addEventListener("click", function () {
-    loadAll().catch(function () {});
+    loadAll();
   });
 
   document.getElementById("logoutBtn").addEventListener("click", function () {
