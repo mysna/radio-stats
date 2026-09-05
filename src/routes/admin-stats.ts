@@ -8,6 +8,9 @@ import type { AppEnv } from "../types";
 const DEFAULT_LIVE_THRESHOLD_SECONDS = 90;
 const DEFAULT_VISITOR_LIST_LIMIT = 50;
 const MAX_VISITOR_LIST_LIMIT = 200;
+const DEFAULT_DAILY_RANGE_DAYS = 30;
+const MAX_DAILY_RANGE_DAYS = 90;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const adminStats = new Hono<AppEnv>();
 
@@ -71,6 +74,30 @@ adminStats.get("/summary", async (context) => {
     listen_seconds_alltime_total: listenAllTime?.value ?? 0,
     live_threshold_seconds: thresholdSeconds,
   });
+});
+
+adminStats.get("/daily", async (context) => {
+  const db = context.get("db");
+  const days = Math.min(
+    Math.max(Number(context.req.query("days")) || DEFAULT_DAILY_RANGE_DAYS, 1),
+    MAX_DAILY_RANGE_DAYS,
+  );
+  // 사이트 전체(모든 방문자 합산) 일별 청취 시간 추이. 방문자별 합산 테이블을
+  // 날짜로만 다시 묶어서, 원본 세션 이벤트를 스캔하지 않고 바로 구한다.
+  const sinceDate = toKstDate(new Date(Date.now() - (days - 1) * DAY_MS));
+
+  const rows = await db
+    .prepare(
+      `SELECT listen_date, SUM(seconds) AS seconds
+       FROM visitor_daily_listen
+       WHERE listen_date >= ?
+       GROUP BY listen_date
+       ORDER BY listen_date ASC`,
+    )
+    .bind(sinceDate)
+    .all<{ listen_date: string; seconds: number }>();
+
+  return context.json({ days: rows.results });
 });
 
 interface LiveSessionRow {
