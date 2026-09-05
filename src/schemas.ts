@@ -24,6 +24,7 @@ export const listenStartSchema = z.object({
   visitor_id: uuid,
   visit_id: uuid,
   channel_id: channelId,
+  channel_name: shortText,
   broadcaster: shortText,
   region_id: shortText,
   ...programMeta,

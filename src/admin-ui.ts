@@ -310,6 +310,12 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     return date.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
+  // channel_id는 "seoul-011-sbs-lovefm-main" 같은 내부 식별자라 화면에는 channel_name을
+  // 우선 보여주고, 옛날 데이터처럼 channel_name이 없으면 channel_id로 대체한다.
+  function channelLabel(row) {
+    return row.channel_name || row.channel_id;
+  }
+
   function renderTiles(summary) {
     var tiles = document.getElementById("tiles");
     clearNode(tiles);
@@ -385,7 +391,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     }
     sessions.forEach(function (session) {
       var row = el("tr");
-      row.appendChild(el("td", null, session.channel_id));
+      row.appendChild(el("td", null, channelLabel(session)));
       row.appendChild(el("td", null, session.program_title || "-"));
       row.appendChild(el("td", null, session.country || "-"));
       row.appendChild(el("td", null, session.browser || "-"));
@@ -406,7 +412,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     if (detail.channel_totals.length) {
       detail.channel_totals.forEach(function (item) {
         var line = el("div");
-        line.appendChild(el("span", "pill", item.channel_id));
+        line.appendChild(el("span", "pill", channelLabel(item)));
         line.appendChild(document.createTextNode(" " + formatHours(item.seconds)));
         channelWrap.appendChild(line);
       });
@@ -491,7 +497,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
       renderTiles(results[0]);
       renderBarList(
         "liveChannels",
-        (results[1].by_channel || []).map(function (row) { return { label: row.channel_id, value: row.listeners }; }),
+        (results[1].by_channel || []).map(function (row) { return { label: channelLabel(row), value: row.listeners }; }),
         "지금 듣고 있는 사람이 없습니다.",
       );
       renderLiveTable(results[1].sessions || []);
@@ -505,7 +511,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
       );
       renderBarList(
         "byChannel",
-        (results[5].channels || []).map(function (row) { return { label: row.channel_id, value: row.seconds }; }),
+        (results[5].channels || []).map(function (row) { return { label: channelLabel(row), value: row.seconds }; }),
         "데이터가 아직 없습니다.",
         formatHours,
       );
@@ -518,7 +524,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
       renderBarList(
         "byProgram",
         (results[7].programs || []).map(function (row) {
-          return { label: (row.program_title || "제목 없음") + " · " + row.channel_id, value: row.seconds };
+          return { label: (row.program_title || "제목 없음") + " · " + channelLabel(row), value: row.seconds };
         }),
         "데이터가 아직 없습니다.",
         formatHours,

@@ -55,39 +55,39 @@ async function seed(): Promise<{ onlineVisitorId: string; staleVisitorId: string
       .prepare(
         `INSERT INTO listen_sessions (
            id, visitor_id, visit_id, channel_id, started_at, last_heartbeat_at, duration_seconds,
-           broadcaster, region_id, program_title
-         ) VALUES (?, ?, ?, 'kbs.1radio.seoul', ?, ?, 40, 'kbs', 'seoul', 'KBS 뉴스')`,
+           channel_name, broadcaster, region_id, program_title
+         ) VALUES (?, ?, ?, 'kbs.1radio.seoul', ?, ?, 40, 'KBS 1라디오', 'kbs', 'seoul', 'KBS 뉴스')`,
       )
       .bind(crypto.randomUUID(), onlineVisitorId, onlineVisitId, now, now),
     db
       .prepare(
         `INSERT INTO listen_sessions (
            id, visitor_id, visit_id, channel_id, started_at, last_heartbeat_at, ended_at, duration_seconds,
-           broadcaster, region_id
-         ) VALUES (?, ?, ?, 'mbc.sfm.busan', ?, ?, ?, 90, 'mbc', 'busan')`,
+           channel_name, broadcaster, region_id
+         ) VALUES (?, ?, ?, 'mbc.sfm.busan', ?, ?, ?, 90, 'MBC 부산 표준FM', 'mbc', 'busan')`,
       )
       .bind(crypto.randomUUID(), staleVisitorId, staleVisitId, staleHeartbeat, staleHeartbeat, staleHeartbeat),
     db
       .prepare(
-        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, broadcaster, region_id, seconds)
-         VALUES (?, ?, ?, 'kbs', 'seoul', ?)`,
+        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, channel_name, broadcaster, region_id, seconds)
+         VALUES (?, ?, ?, 'KBS 1라디오', 'kbs', 'seoul', ?)`,
       )
       .bind(onlineVisitorId, "2026-07-13", "kbs.1radio.seoul", 40),
     db
       .prepare(
-        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, broadcaster, region_id, seconds)
-         VALUES (?, ?, ?, 'mbc', 'busan', ?)`,
+        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, channel_name, broadcaster, region_id, seconds)
+         VALUES (?, ?, ?, 'MBC 부산 표준FM', 'mbc', 'busan', ?)`,
       )
       .bind(staleVisitorId, "2026-07-12", "mbc.sfm.busan", 90),
     db
       .prepare(
-        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, seconds)
-         VALUES ('2026-07-13', 'kbs.1radio.seoul', 'kbs.news.0900', 'KBS 뉴스', 40)`,
+        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, channel_name, seconds)
+         VALUES ('2026-07-13', 'kbs.1radio.seoul', 'kbs.news.0900', 'KBS 뉴스', 'KBS 1라디오', 40)`,
       ),
     db
       .prepare(
-        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, seconds)
-         VALUES ('2026-07-12', 'mbc.sfm.busan', 'unknown', NULL, 90)`,
+        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, channel_name, seconds)
+         VALUES ('2026-07-12', 'mbc.sfm.busan', 'unknown', NULL, 'MBC 부산 표준FM', 90)`,
       ),
   ]);
 
@@ -149,7 +149,9 @@ describe("GET /v1/admin/stats/live", () => {
       sessions: Array<{ visitor_id: string; channel_id: string }>;
     };
 
-    expect(body.by_channel).toEqual([{ channel_id: "kbs.1radio.seoul", listeners: 1 }]);
+    expect(body.by_channel).toEqual([
+      { channel_id: "kbs.1radio.seoul", channel_name: "KBS 1라디오", listeners: 1 },
+    ]);
     expect(body.sessions).toHaveLength(1);
     expect(body.sessions[0]).toMatchObject({
       visitor_id: seeded.onlineVisitorId,
@@ -177,8 +179,8 @@ describe("GET /v1/admin/stats/by-channel", () => {
     const body = (await response.json()) as { channels: Array<{ channel_id: string; seconds: number }> };
 
     expect(body.channels).toEqual([
-      { channel_id: "mbc.sfm.busan", seconds: 90 },
-      { channel_id: "kbs.1radio.seoul", seconds: 40 },
+      { channel_id: "mbc.sfm.busan", channel_name: "MBC 부산 표준FM", seconds: 90 },
+      { channel_id: "kbs.1radio.seoul", channel_name: "KBS 1라디오", seconds: 40 },
     ]);
   });
 });
@@ -203,8 +205,20 @@ describe("GET /v1/admin/stats/by-program", () => {
     };
 
     expect(body.programs).toEqual([
-      { channel_id: "mbc.sfm.busan", program_key: "unknown", program_title: null, seconds: 90 },
-      { channel_id: "kbs.1radio.seoul", program_key: "kbs.news.0900", program_title: "KBS 뉴스", seconds: 40 },
+      {
+        channel_id: "mbc.sfm.busan",
+        channel_name: "MBC 부산 표준FM",
+        program_key: "unknown",
+        program_title: null,
+        seconds: 90,
+      },
+      {
+        channel_id: "kbs.1radio.seoul",
+        channel_name: "KBS 1라디오",
+        program_key: "kbs.news.0900",
+        program_title: "KBS 뉴스",
+        seconds: 40,
+      },
     ]);
   });
 });
@@ -255,7 +269,9 @@ describe("GET /v1/admin/stats/visitors/:id", () => {
 
     expect(response.status).toBe(200);
     expect(body.visitor).toMatchObject({ id: seeded.onlineVisitorId, country: "KR" });
-    expect(body.channel_totals).toEqual([{ channel_id: "kbs.1radio.seoul", seconds: 40 }]);
+    expect(body.channel_totals).toEqual([
+      { channel_id: "kbs.1radio.seoul", channel_name: "KBS 1라디오", seconds: 40 },
+    ]);
     expect(body.daily_totals).toEqual([{ listen_date: "2026-07-13", seconds: 40 }]);
   });
 });

@@ -121,6 +121,7 @@ events.post("/listen/start", async (context) => {
     visitor_id: visitorId,
     visit_id: visitId,
     channel_id: channelId,
+    channel_name: channelName,
     broadcaster,
     region_id: regionId,
     program_id: programId,
@@ -139,8 +140,8 @@ events.post("/listen/start", async (context) => {
     .prepare(
       `INSERT INTO listen_sessions (
          id, visitor_id, visit_id, channel_id, started_at, last_heartbeat_at, duration_seconds,
-         broadcaster, region_id, program_id, program_title
-       ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+         channel_name, broadcaster, region_id, program_id, program_title
+       ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     )
     .bind(
       sessionId,
@@ -149,6 +150,7 @@ events.post("/listen/start", async (context) => {
       channelId,
       now,
       now,
+      channelName ?? null,
       broadcaster ?? null,
       regionId ?? null,
       programId ?? null,
@@ -195,6 +197,7 @@ async function findVisit(db: Database, visitId: string): Promise<VisitRow | null
 interface ListenSessionRow {
   visitor_id: string;
   channel_id: string;
+  channel_name: string | null;
   last_heartbeat_at: string;
   ended_at: string | null;
   broadcaster: string | null;
@@ -217,7 +220,8 @@ async function applyListenProgress(
   const db = context.get("db");
   const session = await db
     .prepare(
-      "SELECT visitor_id, channel_id, last_heartbeat_at, ended_at, broadcaster, region_id FROM listen_sessions WHERE id = ?",
+      `SELECT visitor_id, channel_id, channel_name, last_heartbeat_at, ended_at, broadcaster, region_id
+       FROM listen_sessions WHERE id = ?`,
     )
     .bind(sessionId)
     .first<ListenSessionRow>();
@@ -247,23 +251,33 @@ async function applyListenProgress(
     db.prepare(updateSql).bind(...updateArgs),
     db
       .prepare(
-        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, broadcaster, region_id, seconds)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, channel_name, broadcaster, region_id, seconds)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(visitor_id, listen_date, channel_id) DO UPDATE SET
            seconds = seconds + excluded.seconds,
+           channel_name = excluded.channel_name,
            broadcaster = excluded.broadcaster,
            region_id = excluded.region_id`,
       )
-      .bind(session.visitor_id, listenDate, session.channel_id, session.broadcaster, session.region_id, elapsedSeconds),
+      .bind(
+        session.visitor_id,
+        listenDate,
+        session.channel_id,
+        session.channel_name,
+        session.broadcaster,
+        session.region_id,
+        elapsedSeconds,
+      ),
     db
       .prepare(
-        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, seconds)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, channel_name, seconds)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(listen_date, channel_id, program_key) DO UPDATE SET
            seconds = seconds + excluded.seconds,
-           program_title = excluded.program_title`,
+           program_title = excluded.program_title,
+           channel_name = excluded.channel_name`,
       )
-      .bind(listenDate, session.channel_id, programKey, options.programTitle, elapsedSeconds),
+      .bind(listenDate, session.channel_id, programKey, options.programTitle, session.channel_name, elapsedSeconds),
     db.prepare("UPDATE visitors SET last_seen_at = ? WHERE id = ?").bind(now, session.visitor_id),
   ]);
 

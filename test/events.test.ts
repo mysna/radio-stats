@@ -160,6 +160,7 @@ describe("listen events", () => {
         visitor_id: visitorId,
         visit_id: visitId,
         channel_id: "kbs.1radio.seoul",
+        channel_name: "KBS 1라디오",
         broadcaster: "kbs",
         region_id: "seoul",
       }),
@@ -193,19 +194,19 @@ describe("listen events", () => {
 
     const daily = await db
       .prepare(
-        "SELECT seconds, broadcaster, region_id FROM visitor_daily_listen WHERE visitor_id = ? AND listen_date = ? AND channel_id = ?",
+        "SELECT seconds, broadcaster, region_id, channel_name FROM visitor_daily_listen WHERE visitor_id = ? AND listen_date = ? AND channel_id = ?",
       )
       .bind(visitorId, "2026-07-13", "kbs.1radio.seoul")
-      .first<{ seconds: number; broadcaster: string; region_id: string }>();
-    expect(daily).toMatchObject({ seconds: 60, broadcaster: "kbs", region_id: "seoul" });
+      .first<{ seconds: number; broadcaster: string; region_id: string; channel_name: string }>();
+    expect(daily).toMatchObject({ seconds: 60, broadcaster: "kbs", region_id: "seoul", channel_name: "KBS 1라디오" });
 
     const programDaily = await db
       .prepare(
-        "SELECT seconds, program_title FROM program_daily_listen WHERE listen_date = ? AND channel_id = ? AND program_key = ?",
+        "SELECT seconds, program_title, channel_name FROM program_daily_listen WHERE listen_date = ? AND channel_id = ? AND program_key = ?",
       )
       .bind("2026-07-13", "kbs.1radio.seoul", "kbs.news.0900")
-      .first<{ seconds: number; program_title: string }>();
-    expect(programDaily).toMatchObject({ seconds: 60, program_title: "KBS 뉴스" });
+      .first<{ seconds: number; program_title: string; channel_name: string }>();
+    expect(programDaily).toMatchObject({ seconds: 60, program_title: "KBS 뉴스", channel_name: "KBS 1라디오" });
 
     // 이미 종료된 세션에 다시 종료 이벤트가 와도(beacon 중복 등) 중복 집계하지 않는다.
     const secondEnd = await request("/v1/events/listen/end", {
