@@ -659,7 +659,14 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
         }
       });
 
-      render(data);
+      // render()가 던지는 예외까지 잡아야 한다 — 못 잡으면 updatedAt 갱신과 에러 배너 표시가
+      // 통째로 건너뛰어져서, 화면이 그냥 조용히 멈춘 것처럼 보이고 원인도 알 수 없게 된다.
+      try {
+        render(data);
+      } catch (renderError) {
+        errors.push("화면을 그리는 중 오류: " + (renderError && renderError.message ? renderError.message : String(renderError)));
+      }
+
       updatedAt.textContent = "업데이트: " + new Date().toLocaleTimeString("ko-KR");
       if (errors.length) {
         showDashboardError("일부 통계를 불러오지 못했습니다 — " + errors.join(" | "));
