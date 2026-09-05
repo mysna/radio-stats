@@ -180,6 +180,46 @@ adminStats.get("/by-region", async (context) => {
   return context.json({ regions: rows.results });
 });
 
+adminStats.get("/demographics", async (context) => {
+  const db = context.get("db");
+  // 방문자 통계는 visitors(고유 인원) 기준, 유입 경로는 방문마다 다를 수 있어 visits 기준.
+  const groupByVisitors = (column: string, unknownLabel: string) =>
+    db
+      .prepare(
+        `SELECT COALESCE(NULLIF(TRIM(${column}), ''), ?) AS label, COUNT(*) AS count
+         FROM visitors
+         GROUP BY label
+         ORDER BY count DESC
+         LIMIT 15`,
+      )
+      .bind(unknownLabel)
+      .all<{ label: string; count: number }>();
+
+  const [countries, browsers, osList, devices, referrers] = await Promise.all([
+    groupByVisitors("country", "알 수 없음"),
+    groupByVisitors("browser", "알 수 없음"),
+    groupByVisitors("os", "알 수 없음"),
+    groupByVisitors("device_type", "알 수 없음"),
+    db
+      .prepare(
+        `SELECT COALESCE(NULLIF(TRIM(referrer), ''), '직접 방문') AS label, COUNT(*) AS count
+         FROM visits
+         GROUP BY label
+         ORDER BY count DESC
+         LIMIT 15`,
+      )
+      .all<{ label: string; count: number }>(),
+  ]);
+
+  return context.json({
+    countries: countries.results,
+    browsers: browsers.results,
+    os: osList.results,
+    devices: devices.results,
+    referrers: referrers.results,
+  });
+});
+
 adminStats.get("/by-program", async (context) => {
   const db = context.get("db");
   const limit = Math.min(Math.max(Number(context.req.query("limit")) || DEFAULT_VISITOR_LIST_LIMIT, 1), MAX_VISITOR_LIST_LIMIT);

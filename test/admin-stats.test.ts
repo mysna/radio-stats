@@ -165,6 +165,35 @@ describe("GET /v1/admin/stats/live", () => {
   });
 });
 
+describe("GET /v1/admin/stats/demographics", () => {
+  it("는 국가/브라우저/OS/기기/유입경로별 방문자 분포를 반환한다", async () => {
+    const response = await adminRequest("/v1/admin/stats/demographics");
+    const body = (await response.json()) as {
+      countries: Array<{ label: string; count: number }>;
+      browsers: Array<{ label: string; count: number }>;
+      os: Array<{ label: string; count: number }>;
+      devices: Array<{ label: string; count: number }>;
+      referrers: Array<{ label: string; count: number }>;
+    };
+
+    expect(response.status).toBe(200);
+    const byLabel = (rows: Array<{ label: string }>) => [...rows].sort((a, b) => a.label.localeCompare(b.label));
+    expect(byLabel(body.countries)).toEqual([
+      { label: "KR", count: 1 },
+      { label: "US", count: 1 },
+    ]);
+    expect(byLabel(body.browsers)).toEqual([
+      { label: "Chrome", count: 1 },
+      { label: "Safari", count: 1 },
+    ]);
+    expect(byLabel(body.devices)).toEqual([
+      { label: "desktop", count: 1 },
+      { label: "mobile", count: 1 },
+    ]);
+    expect(body.referrers).toEqual([{ label: "직접 방문", count: 2 }]);
+  });
+});
+
 describe("GET /v1/admin/stats/by-broadcaster", () => {
   it("는 방송국별 누적 청취 시간을 내림차순으로 반환한다", async () => {
     const response = await adminRequest("/v1/admin/stats/by-broadcaster");

@@ -169,6 +169,24 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 { "days": [{ "listen_date": "2026-07-01", "seconds": 12345, "listeners": 42 }, ...] }
 ```
 
+### `GET /v1/admin/stats/demographics`
+
+방문자 속성 분포(국가/브라우저/OS/기기는 `visitors` 기준 고유 인원, 유입 경로는
+`visits` 기준 방문 횟수). 각 목록은 개수 내림차순 상위 15개.
+
+```json
+{
+  "countries": [{ "label": "KR", "count": 1200 }, { "label": "US", "count": 34 }],
+  "browsers": [{ "label": "Chrome", "count": 900 }],
+  "os": [{ "label": "Mac OS", "count": 500 }],
+  "devices": [{ "label": "desktop", "count": 700 }, { "label": "mobile", "count": 500 }],
+  "referrers": [{ "label": "직접 방문", "count": 800 }, { "label": "https://google.com/", "count": 120 }]
+}
+```
+
+값이 없으면 `country`/`browser`/`os`/`device_type`은 "알 수 없음", `referrer`는
+"직접 방문"으로 묶인다.
+
 ### `GET /v1/admin/stats/visitors?limit=50&offset=0`
 
 방문자별 요약 목록(최근 방문순).
@@ -182,6 +200,19 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 브라우저로 열면 되는 통계 대시보드 페이지. Worker가 직접 서빙하며 별도 배포가 필요
 없다. 최초 접속 시 `ADMIN_TOKEN`을 입력하면 브라우저 `localStorage`에 저장해두고
 같은 origin으로 위 관리자 API들을 호출한다.
+
+자주 확인할 것과 어쩌다 볼 것을 나눠 탭으로 구성한다(URL 해시로 상태 유지, 새로고침해도
+같은 탭에 남는다):
+
+- **홈**: 지금/오늘 지표(현재 접속·청취, 오늘 방문자·청취자·청취시간), 누적 지표,
+  지금 듣는 채널 상위 5개, 최근 30일 청취시간·청취자 수 추이
+- **실시간**: 채널별 실시간 청취자 전체, 실시간 접속 세션 테이블
+- **채널 분석**: 방송국별/채널별/지역별/프로그램별 누적 청취 시간
+- **방문자**: 방문자 목록(탭하면 날짜별·채널별 상세)
+- **방문자 속성**: 국가별/브라우저별/OS별/기기별 분포, 유입 경로
+
+탭을 전환하면 그 탭에 필요한 API만 새로 불러온다(홈을 보는 동안엔 채널 분석 API를
+호출하지 않는다). 15초마다 지금 보고 있는 탭만 자동 새로고침된다.
 
 차트는 [Chart.js](https://www.chartjs.org/)를 cdnjs에서 `<script>` 태그로 불러와
 그린다(빌드 과정 없음). 오프라인이거나 cdnjs가 막힌 네트워크에서는 차트 대신

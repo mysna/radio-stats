@@ -88,6 +88,27 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
   header h1 { font-size: 18px; margin: 0; }
   .controls { display: flex; align-items: center; gap: 8px; }
   #updatedAt { font-size: 12px; color: var(--text-muted); }
+  .tab-nav {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab-btn.is-active { color: var(--accent); border-bottom-color: var(--accent); }
   .tiles {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -156,67 +177,115 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
       </div>
     </header>
 
+    <nav id="tabNav" class="tab-nav">
+      <button class="tab-btn" data-tab="home" type="button">홈</button>
+      <button class="tab-btn" data-tab="live" type="button">실시간</button>
+      <button class="tab-btn" data-tab="channels" type="button">채널 분석</button>
+      <button class="tab-btn" data-tab="visitors" type="button">방문자</button>
+      <button class="tab-btn" data-tab="demographics" type="button">방문자 속성</button>
+    </nav>
+
     <p id="dashboardError" class="error-banner" hidden></p>
 
-    <h3 class="tiles-heading">방문</h3>
-    <section class="tiles" id="tilesVisits"></section>
+    <section class="page" id="page-home">
+      <h3 class="tiles-heading">지금 / 오늘</h3>
+      <section class="tiles" id="tilesToday"></section>
 
-    <h3 class="tiles-heading">청취</h3>
-    <section class="tiles" id="tilesListen"></section>
+      <h3 class="tiles-heading">누적</h3>
+      <section class="tiles" id="tilesTotal"></section>
 
-    <section class="panel">
-      <h2>지금 듣고 있는 채널</h2>
-      <div class="chart-wrap"><canvas id="liveChannelsChart"></canvas></div>
+      <section class="panel">
+        <h2>지금 듣고 있는 채널 (상위 5)</h2>
+        <div class="chart-wrap"><canvas id="liveChannelsChartHome"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <h2>일별 청취 시간 추이 (최근 30일, 사이트 전체)</h2>
+        <div class="chart-wrap"><canvas id="dailyHoursChart"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <h2>일별 순수 청취자 수 추이 (최근 30일)</h2>
+        <div class="chart-wrap"><canvas id="dailyListenersChart"></canvas></div>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>일별 청취 시간 추이 (최근 30일, 사이트 전체)</h2>
-      <div class="chart-wrap"><canvas id="dailyHoursChart"></canvas></div>
+    <section class="page" id="page-live" hidden>
+      <section class="panel">
+        <h2>채널별 실시간 청취자</h2>
+        <div class="chart-wrap"><canvas id="liveChannelsChart"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <h2>실시간 접속 세션</h2>
+        <div class="table-wrap">
+          <table id="liveTable">
+            <thead><tr><th>채널</th><th>프로그램</th><th>국가</th><th>브라우저</th><th>OS</th><th>기기</th><th>경과</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>일별 순수 청취자 수 추이 (최근 30일)</h2>
-      <div class="chart-wrap"><canvas id="dailyListenersChart"></canvas></div>
+    <section class="page" id="page-channels" hidden>
+      <section class="panel">
+        <h2>방송국별 누적 청취 시간</h2>
+        <div class="chart-wrap"><canvas id="byBroadcasterChart"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <h2>채널별 누적 청취 시간</h2>
+        <div class="chart-wrap"><canvas id="byChannelChart"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <h2>지역별 누적 청취 시간 (수도권 vs 지역)</h2>
+        <div class="chart-wrap"><canvas id="byRegionChart"></canvas></div>
+      </section>
+
+      <section class="panel">
+        <h2>프로그램 TOP</h2>
+        <div class="chart-wrap"><canvas id="byProgramChart"></canvas></div>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>방송국별 누적 청취 시간</h2>
-      <div class="chart-wrap"><canvas id="byBroadcasterChart"></canvas></div>
+    <section class="page" id="page-visitors" hidden>
+      <section class="panel">
+        <h2>방문자 (최근 방문순, 탭하면 상세)</h2>
+        <div class="table-wrap">
+          <table id="visitorsTable">
+            <thead><tr><th>국가</th><th>브라우저</th><th>OS</th><th>방문</th><th>오늘 청취</th><th>누적 청취</th><th>최근 방문</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>채널별 누적 청취 시간</h2>
-      <div class="chart-wrap"><canvas id="byChannelChart"></canvas></div>
-    </section>
+    <section class="page" id="page-demographics" hidden>
+      <section class="panel">
+        <h2>국가별 방문자</h2>
+        <div class="chart-wrap"><canvas id="countriesChart"></canvas></div>
+      </section>
 
-    <section class="panel">
-      <h2>지역별 누적 청취 시간 (수도권 vs 지역)</h2>
-      <div class="chart-wrap"><canvas id="byRegionChart"></canvas></div>
-    </section>
+      <section class="panel">
+        <h2>브라우저별 방문자</h2>
+        <div class="chart-wrap"><canvas id="browsersChart"></canvas></div>
+      </section>
 
-    <section class="panel">
-      <h2>프로그램 TOP</h2>
-      <div class="chart-wrap"><canvas id="byProgramChart"></canvas></div>
-    </section>
+      <section class="panel">
+        <h2>OS별 방문자</h2>
+        <div class="chart-wrap"><canvas id="osChart"></canvas></div>
+      </section>
 
-    <section class="panel">
-      <h2>실시간 접속 세션</h2>
-      <div class="table-wrap">
-        <table id="liveTable">
-          <thead><tr><th>채널</th><th>프로그램</th><th>국가</th><th>브라우저</th><th>OS</th><th>기기</th><th>경과</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
+      <section class="panel">
+        <h2>기기별 방문자</h2>
+        <div class="chart-wrap"><canvas id="devicesChart"></canvas></div>
+      </section>
 
-    <section class="panel">
-      <h2>방문자 (최근 방문순, 탭하면 상세)</h2>
-      <div class="table-wrap">
-        <table id="visitorsTable">
-          <thead><tr><th>국가</th><th>브라우저</th><th>OS</th><th>방문</th><th>오늘 청취</th><th>누적 청취</th><th>최근 방문</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
+      <section class="panel">
+        <h2>유입 경로</h2>
+        <div class="chart-wrap"><canvas id="referrersChart"></canvas></div>
+      </section>
     </section>
   </div>
 </div>
@@ -225,7 +294,6 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
   "use strict";
 
   var TOKEN_KEY = "radio-stats:admin-token";
-  var LIVE_THRESHOLD_FALLBACK = 90;
   var AUTO_REFRESH_MS = 15000;
 
   var gate = document.getElementById("gate");
@@ -357,21 +425,19 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     });
   }
 
-  function renderTiles(summary) {
-    renderTileGroup("tilesVisits", [
-      ["전체 방문자", summary.visitors_total],
-      ["오늘 방문자", summary.visitors_today],
+  // 자주 확인할 것(지금/오늘)과 어쩌다 볼 것(누적)을 나눠서, 홈 화면엔 꼭 필요한 것만 둔다.
+  function renderHomeTiles(summary) {
+    renderTileGroup("tilesToday", [
       ["현재 접속", summary.currently_online],
-    ]);
-    renderTileGroup("tilesListen", [
       ["현재 청취", summary.currently_listening],
-      ["오늘 청취 시간", formatHours(summary.listen_seconds_today_total)],
-      ["누적 청취 시간", formatHours(summary.listen_seconds_alltime_total)],
+      ["오늘 방문자", summary.visitors_today],
       ["오늘 청취자", summary.listeners_today],
-      ["최근 7일 청취자", summary.listeners_last_7_days],
-      ["최근 30일 청취자", summary.listeners_last_30_days],
-      ["최근 1년 청취자", summary.listeners_last_365_days],
+      ["오늘 청취 시간", formatHours(summary.listen_seconds_today_total)],
+    ]);
+    renderTileGroup("tilesTotal", [
+      ["전체 방문자", summary.visitors_total],
       ["누적 청취자", summary.listeners_all_time],
+      ["누적 청취 시간", formatHours(summary.listen_seconds_alltime_total)],
     ]);
   }
 
@@ -574,21 +640,14 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     });
   }
 
-  // 요청 하나가 실패해도(예: 새로 추가한 엔드포인트 하나만 오류) 나머지는 정상적으로
+  function hoursValue(seconds) { return seconds / 3600; }
+  function formatHoursValue(value) { return formatHours(value * 3600); }
+  function countLabel(unit) { return function (value) { return value + unit; }; }
+
+  // 요청 하나가 실패해도(예: 엔드포인트 하나만 오류) 그 탭의 나머지는 정상적으로
   // 그려지도록 Promise.all 대신 allSettled를 쓴다 — 전부-아니면-전무로 묶여 있으면
   // 실패 이유를 알 방법 없이 화면 전체가 조용히 비어버린다.
-  function loadAll() {
-    var requests = [
-      { key: "summary", path: "/v1/admin/stats/summary" },
-      { key: "live", path: "/v1/admin/stats/live" },
-      { key: "daily", path: "/v1/admin/stats/daily?days=30" },
-      { key: "visitors", path: "/v1/admin/stats/visitors?limit=50" },
-      { key: "byBroadcaster", path: "/v1/admin/stats/by-broadcaster" },
-      { key: "byChannel", path: "/v1/admin/stats/by-channel?limit=20" },
-      { key: "byRegion", path: "/v1/admin/stats/by-region" },
-      { key: "byProgram", path: "/v1/admin/stats/by-program?limit=20" },
-    ];
-
+  function fetchAndRender(requests, render) {
     return Promise.allSettled(requests.map(function (r) { return authFetch(r.path); })).then(function (settled) {
       var data = {};
       var errors = [];
@@ -600,58 +659,8 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
         }
       });
 
-      if (data.summary) renderTiles(data.summary);
-      if (data.live) {
-        renderBarChart(
-          "liveChannelsChart",
-          (data.live.by_channel || []).map(function (row) { return { label: channelLabel(row), value: row.listeners }; }),
-          function (value) { return value + "명"; },
-        );
-        renderLiveTable(data.live.sessions || []);
-      }
-      if (data.daily) {
-        var days = data.daily.days || [];
-        var dayLabels = days.map(function (row) { return row.listen_date.slice(5); });
-        renderLineChart("dailyHoursChart", dayLabels, days.map(function (row) { return row.seconds / 3600; }), function (value) {
-          return formatHours(value * 3600);
-        });
-        renderLineChart("dailyListenersChart", dayLabels, days.map(function (row) { return row.listeners; }), function (value) {
-          return value + "명";
-        });
-      }
-      if (data.visitors) renderVisitorsTable(data.visitors.visitors || []);
-      if (data.byBroadcaster) {
-        renderBarChart(
-          "byBroadcasterChart",
-          (data.byBroadcaster.broadcasters || []).map(function (row) { return { label: row.broadcaster, value: row.seconds / 3600 }; }),
-          function (value) { return formatHours(value * 3600); },
-        );
-      }
-      if (data.byChannel) {
-        renderBarChart(
-          "byChannelChart",
-          (data.byChannel.channels || []).map(function (row) { return { label: channelLabel(row), value: row.seconds / 3600 }; }),
-          function (value) { return formatHours(value * 3600); },
-        );
-      }
-      if (data.byRegion) {
-        renderBarChart(
-          "byRegionChart",
-          (data.byRegion.regions || []).map(function (row) { return { label: row.region_group, value: row.seconds / 3600 }; }),
-          function (value) { return formatHours(value * 3600); },
-        );
-      }
-      if (data.byProgram) {
-        renderBarChart(
-          "byProgramChart",
-          (data.byProgram.programs || []).map(function (row) {
-            return { label: (row.program_title || "제목 없음") + " · " + channelLabel(row), value: row.seconds / 3600 };
-          }),
-          function (value) { return formatHours(value * 3600); },
-        );
-      }
+      render(data);
       updatedAt.textContent = "업데이트: " + new Date().toLocaleTimeString("ko-KR");
-
       if (errors.length) {
         showDashboardError("일부 통계를 불러오지 못했습니다 — " + errors.join(" | "));
       } else {
@@ -660,17 +669,130 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     });
   }
 
+  function renderChannelBarChart(canvasId, rows) {
+    renderBarChart(canvasId, rows.map(function (row) { return { label: channelLabel(row), value: hoursValue(row.seconds) }; }), formatHoursValue);
+  }
+
+  function loadHome() {
+    return fetchAndRender(
+      [
+        { key: "summary", path: "/v1/admin/stats/summary" },
+        { key: "live", path: "/v1/admin/stats/live" },
+        { key: "daily", path: "/v1/admin/stats/daily?days=30" },
+      ],
+      function (data) {
+        if (data.summary) renderHomeTiles(data.summary);
+        if (data.live) {
+          var top5 = (data.live.by_channel || []).slice(0, 5).map(function (row) {
+            return { label: channelLabel(row), value: row.listeners };
+          });
+          renderBarChart("liveChannelsChartHome", top5, countLabel("명"));
+        }
+        if (data.daily) {
+          var days = data.daily.days || [];
+          var dayLabels = days.map(function (row) { return row.listen_date.slice(5); });
+          renderLineChart("dailyHoursChart", dayLabels, days.map(function (row) { return hoursValue(row.seconds); }), formatHoursValue);
+          renderLineChart("dailyListenersChart", dayLabels, days.map(function (row) { return row.listeners; }), countLabel("명"));
+        }
+      },
+    );
+  }
+
+  function loadLive() {
+    return fetchAndRender([{ key: "live", path: "/v1/admin/stats/live" }], function (data) {
+      if (!data.live) return;
+      var rows = (data.live.by_channel || []).map(function (row) { return { label: channelLabel(row), value: row.listeners }; });
+      renderBarChart("liveChannelsChart", rows, countLabel("명"));
+      renderLiveTable(data.live.sessions || []);
+    });
+  }
+
+  function loadChannels() {
+    return fetchAndRender(
+      [
+        { key: "byBroadcaster", path: "/v1/admin/stats/by-broadcaster" },
+        { key: "byChannel", path: "/v1/admin/stats/by-channel?limit=20" },
+        { key: "byRegion", path: "/v1/admin/stats/by-region" },
+        { key: "byProgram", path: "/v1/admin/stats/by-program?limit=20" },
+      ],
+      function (data) {
+        if (data.byBroadcaster) {
+          renderBarChart(
+            "byBroadcasterChart",
+            (data.byBroadcaster.broadcasters || []).map(function (row) { return { label: row.broadcaster, value: hoursValue(row.seconds) }; }),
+            formatHoursValue,
+          );
+        }
+        if (data.byChannel) renderChannelBarChart("byChannelChart", data.byChannel.channels || []);
+        if (data.byRegion) {
+          renderBarChart(
+            "byRegionChart",
+            (data.byRegion.regions || []).map(function (row) { return { label: row.region_group, value: hoursValue(row.seconds) }; }),
+            formatHoursValue,
+          );
+        }
+        if (data.byProgram) {
+          renderBarChart(
+            "byProgramChart",
+            (data.byProgram.programs || []).map(function (row) {
+              return { label: (row.program_title || "제목 없음") + " · " + channelLabel(row), value: hoursValue(row.seconds) };
+            }),
+            formatHoursValue,
+          );
+        }
+      },
+    );
+  }
+
+  function loadVisitors() {
+    return fetchAndRender([{ key: "visitors", path: "/v1/admin/stats/visitors?limit=50" }], function (data) {
+      if (data.visitors) renderVisitorsTable(data.visitors.visitors || []);
+    });
+  }
+
+  function loadDemographics() {
+    return fetchAndRender([{ key: "demo", path: "/v1/admin/stats/demographics" }], function (data) {
+      if (!data.demo) return;
+      function toRows(list) {
+        return (list || []).map(function (row) { return { label: row.label, value: row.count }; });
+      }
+      renderBarChart("countriesChart", toRows(data.demo.countries), countLabel("명"));
+      renderBarChart("browsersChart", toRows(data.demo.browsers), countLabel("명"));
+      renderBarChart("osChart", toRows(data.demo.os), countLabel("명"));
+      renderBarChart("devicesChart", toRows(data.demo.devices), countLabel("명"));
+      renderBarChart("referrersChart", toRows(data.demo.referrers), countLabel("회"));
+    });
+  }
+
+  var loaders = { home: loadHome, live: loadLive, channels: loadChannels, visitors: loadVisitors, demographics: loadDemographics };
+  var tabButtons = document.querySelectorAll(".tab-btn");
+  var currentTab = "home";
+
+  function setActiveTab(tab) {
+    if (!loaders[tab]) tab = "home";
+    currentTab = tab;
+    Object.keys(loaders).forEach(function (key) {
+      document.getElementById("page-" + key).hidden = key !== tab;
+    });
+    tabButtons.forEach(function (btn) {
+      btn.classList.toggle("is-active", btn.getAttribute("data-tab") === tab);
+    });
+    if (location.hash.slice(1) !== tab) location.hash = tab;
+    loaders[tab]();
+    startAutoRefresh();
+  }
+
   function startAutoRefresh() {
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(function () {
       if (document.hidden) return;
-      loadAll();
+      loaders[currentTab]();
     }, AUTO_REFRESH_MS);
   }
 
   function enter() {
     showDashboard();
-    loadAll().then(startAutoRefresh);
+    setActiveTab(location.hash ? location.hash.slice(1) : "home");
   }
 
   gateForm.addEventListener("submit", function (event) {
@@ -682,8 +804,13 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     enter();
   });
 
+  tabButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () { setActiveTab(btn.getAttribute("data-tab")); });
+  });
+  window.addEventListener("hashchange", function () { setActiveTab(location.hash.slice(1)); });
+
   document.getElementById("refreshBtn").addEventListener("click", function () {
-    loadAll();
+    loaders[currentTab]();
   });
 
   document.getElementById("logoutBtn").addEventListener("click", function () {
