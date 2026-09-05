@@ -95,9 +95,17 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
   "currently_listening": 9,
   "listen_seconds_today_total": 456000,
   "listen_seconds_alltime_total": 98765432,
+  "listeners_today": 87,
+  "listeners_last_7_days": 320,
+  "listeners_last_30_days": 810,
+  "listeners_last_365_days": 4200,
+  "listeners_all_time": 5100,
   "live_threshold_seconds": 90
 }
 ```
+
+`listeners_*`는 방문이 아니라 실제로 한 번이라도 재생한 고유 방문자 수(trailing window,
+오늘/7일/30일/365일/전체)다. `visitors_total`(그냥 방문)과는 다른 지표다.
 
 ### `GET /v1/admin/stats/live`
 
@@ -158,7 +166,7 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 사이트 전체(모든 방문자 합산) 일별 청취 시간 추이. 오래된 날짜부터 최신순.
 
 ```json
-{ "days": [{ "listen_date": "2026-07-01", "seconds": 12345 }, ...] }
+{ "days": [{ "listen_date": "2026-07-01", "seconds": 12345, "listeners": 42 }, ...] }
 ```
 
 ### `GET /v1/admin/stats/visitors?limit=50&offset=0`
@@ -174,3 +182,8 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 브라우저로 열면 되는 통계 대시보드 페이지. Worker가 직접 서빙하며 별도 배포가 필요
 없다. 최초 접속 시 `ADMIN_TOKEN`을 입력하면 브라우저 `localStorage`에 저장해두고
 같은 origin으로 위 관리자 API들을 호출한다.
+
+차트는 [Chart.js](https://www.chartjs.org/)를 cdnjs에서 `<script>` 태그로 불러와
+그린다(빌드 과정 없음). 오프라인이거나 cdnjs가 막힌 네트워크에서는 차트 대신
+"Chart is not defined" 콘솔 에러와 함께 그 부분만 비어 보인다 — 통계 타일과 표는
+이 스크립트에 의존하지 않으므로 정상 동작한다.
