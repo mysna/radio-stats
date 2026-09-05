@@ -6,6 +6,7 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>라디오 통계 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root {
     color-scheme: light;
@@ -109,11 +110,8 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     margin-bottom: 16px;
   }
   .panel h2 { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; font-weight: 600; }
-  .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
-  .bar-label { width: 40%; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-track { flex: 1; background: var(--gridline); border-radius: 4px; height: 16px; overflow: hidden; }
-  .bar-fill { background: var(--accent); height: 100%; border-radius: 4px; }
-  .bar-count { min-width: 32px; text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tiles-heading { font-size: 12px; color: var(--text-muted); margin: 0 0 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+  .chart-wrap { position: relative; width: 100%; height: 220px; }
   .empty { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
   .error-banner {
     background: rgba(208, 59, 59, 0.12);
@@ -124,10 +122,6 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     font-size: 13px;
     margin-bottom: 16px;
   }
-  .daily-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
-  .daily-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-  .daily-bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
-  .daily-label { font-size: 10px; color: var(--text-muted); margin-top: 4px; white-space: nowrap; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--gridline); }
@@ -164,36 +158,45 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
 
     <p id="dashboardError" class="error-banner" hidden></p>
 
-    <section class="tiles" id="tiles"></section>
+    <h3 class="tiles-heading">방문</h3>
+    <section class="tiles" id="tilesVisits"></section>
+
+    <h3 class="tiles-heading">청취</h3>
+    <section class="tiles" id="tilesListen"></section>
 
     <section class="panel">
       <h2>지금 듣고 있는 채널</h2>
-      <div id="liveChannels"></div>
+      <div class="chart-wrap"><canvas id="liveChannelsChart"></canvas></div>
     </section>
 
     <section class="panel">
-      <h2>최근 30일 청취 시간 추이 (사이트 전체)</h2>
-      <div id="dailyChart" class="daily-chart"></div>
+      <h2>일별 청취 시간 추이 (최근 30일, 사이트 전체)</h2>
+      <div class="chart-wrap"><canvas id="dailyHoursChart"></canvas></div>
+    </section>
+
+    <section class="panel">
+      <h2>일별 순수 청취자 수 추이 (최근 30일)</h2>
+      <div class="chart-wrap"><canvas id="dailyListenersChart"></canvas></div>
     </section>
 
     <section class="panel">
       <h2>방송국별 누적 청취 시간</h2>
-      <div id="byBroadcaster"></div>
+      <div class="chart-wrap"><canvas id="byBroadcasterChart"></canvas></div>
     </section>
 
     <section class="panel">
       <h2>채널별 누적 청취 시간</h2>
-      <div id="byChannel"></div>
+      <div class="chart-wrap"><canvas id="byChannelChart"></canvas></div>
     </section>
 
     <section class="panel">
       <h2>지역별 누적 청취 시간 (수도권 vs 지역)</h2>
-      <div id="byRegion"></div>
+      <div class="chart-wrap"><canvas id="byRegionChart"></canvas></div>
     </section>
 
     <section class="panel">
       <h2>프로그램 TOP</h2>
-      <div id="byProgram"></div>
+      <div class="chart-wrap"><canvas id="byProgramChart"></canvas></div>
     </section>
 
     <section class="panel">
@@ -343,17 +346,9 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     return row.channel_name || row.channel_id;
   }
 
-  function renderTiles(summary) {
-    var tiles = document.getElementById("tiles");
+  function renderTileGroup(containerId, items) {
+    var tiles = document.getElementById(containerId);
     clearNode(tiles);
-    var items = [
-      ["전체 방문자", summary.visitors_total],
-      ["오늘 방문자", summary.visitors_today],
-      ["현재 접속", summary.currently_online],
-      ["현재 청취", summary.currently_listening],
-      ["오늘 청취 시간", formatHours(summary.listen_seconds_today_total)],
-      ["누적 청취 시간", formatHours(summary.listen_seconds_alltime_total)],
-    ];
     items.forEach(function (item) {
       var tile = el("div", "tile");
       tile.appendChild(el("div", "tile-label", item[0]));
@@ -362,46 +357,115 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
     });
   }
 
-  // rows: [{ label, value }], formatValue(value) -> 표시할 텍스트. containerId 안에 막대 목록을 그린다.
-  function renderBarList(containerId, rows, emptyMessage, formatValue) {
-    var container = document.getElementById(containerId);
-    clearNode(container);
-    if (!rows.length) {
-      container.appendChild(el("div", "empty", emptyMessage));
-      return;
+  function renderTiles(summary) {
+    renderTileGroup("tilesVisits", [
+      ["전체 방문자", summary.visitors_total],
+      ["오늘 방문자", summary.visitors_today],
+      ["현재 접속", summary.currently_online],
+    ]);
+    renderTileGroup("tilesListen", [
+      ["현재 청취", summary.currently_listening],
+      ["오늘 청취 시간", formatHours(summary.listen_seconds_today_total)],
+      ["누적 청취 시간", formatHours(summary.listen_seconds_alltime_total)],
+      ["오늘 청취자", summary.listeners_today],
+      ["최근 7일 청취자", summary.listeners_last_7_days],
+      ["최근 30일 청취자", summary.listeners_last_30_days],
+      ["최근 1년 청취자", summary.listeners_last_365_days],
+      ["누적 청취자", summary.listeners_all_time],
+    ]);
+  }
+
+  // 다크/라이트 모드에 맞춰 차트 색을 고른다. references/palette.md의 blue 슬롯과 동일하다.
+  function chartTheme() {
+    var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    return {
+      accent: dark ? "#3987e5" : "#2a78d6",
+      accentFill: dark ? "rgba(57, 135, 229, 0.25)" : "rgba(42, 120, 214, 0.18)",
+      grid: dark ? "#2c2c2a" : "#e1e0d9",
+      text: dark ? "#c3c2b7" : "#52514e",
+    };
+  }
+
+  var charts = {};
+
+  function destroyChart(canvasId) {
+    if (charts[canvasId]) {
+      charts[canvasId].destroy();
+      delete charts[canvasId];
     }
-    var format = formatValue || function (value) { return String(value); };
-    var max = rows.reduce(function (acc, row) { return Math.max(acc, row.value); }, 1);
-    rows.forEach(function (row) {
-      var wrap = el("div", "bar-row");
-      wrap.appendChild(el("div", "bar-label", row.label));
-      var track = el("div", "bar-track");
-      var fill = el("div", "bar-fill");
-      fill.style.width = Math.max(4, Math.round((row.value / max) * 100)) + "%";
-      track.appendChild(fill);
-      wrap.appendChild(track);
-      wrap.appendChild(el("div", "bar-count", format(row.value)));
-      container.appendChild(wrap);
+  }
+
+  function renderLineChart(canvasId, labels, values, formatValue) {
+    var theme = chartTheme();
+    destroyChart(canvasId);
+    charts[canvasId] = new Chart(document.getElementById(canvasId).getContext("2d"), {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          borderColor: theme.accent,
+          backgroundColor: theme.accentFill,
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 2,
+          pointHoverRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        // 15초마다 자동 새로고침되므로 매번 애니메이션이 다시 도는 게 오히려 산만하고,
+        // 특히 막대 차트는 생성 직후 리사이즈와 애니메이션이 겹치면 최종 크기가 어긋난다.
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (ctx) { return formatValue(ctx.parsed.y); } } },
+        },
+        scales: {
+          x: { grid: { color: theme.grid }, ticks: { color: theme.text, maxRotation: 0, autoSkip: true } },
+          y: { grid: { color: theme.grid }, ticks: { color: theme.text }, beginAtZero: true },
+        },
+      },
     });
   }
 
-  function renderDailyChart(days) {
-    var container = document.getElementById("dailyChart");
-    clearNode(container);
-    if (!days.length) {
-      container.appendChild(el("div", "empty", "데이터가 아직 없습니다."));
-      return;
-    }
-    var max = days.reduce(function (acc, row) { return Math.max(acc, row.seconds); }, 1);
-    days.forEach(function (row) {
-      var wrap = el("div", "daily-bar-wrap");
-      var bar = el("div", "daily-bar");
-      var heightPct = Math.max(2, Math.round((row.seconds / max) * 100));
-      bar.style.height = heightPct + "%";
-      bar.title = row.listen_date + " · " + formatHours(row.seconds);
-      wrap.appendChild(bar);
-      wrap.appendChild(el("div", "daily-label", row.listen_date.slice(5)));
-      container.appendChild(wrap);
+  // rows: [{ label, value }]. 세로 막대 목록 대신 Chart.js 가로 막대 차트로 그린다.
+  function renderBarChart(canvasId, rows, formatValue) {
+    var theme = chartTheme();
+    destroyChart(canvasId);
+    var canvas = document.getElementById(canvasId);
+    canvas.parentElement.style.height = Math.max(160, Math.min(560, rows.length * 28 + 40)) + "px";
+    // 높이를 바꾼 직후 바로 차트를 만들면 Chart.js가 리사이즈 반영 전 크기로 그려서
+    // 막대 길이가 실제 값보다 짧게 나온다. 레이아웃을 강제로 한 번 플러시해서 막는다.
+    void canvas.parentElement.offsetHeight;
+    charts[canvasId] = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: rows.map(function (row) { return row.label; }),
+        datasets: [{
+          data: rows.map(function (row) { return row.value; }),
+          backgroundColor: theme.accent,
+          borderRadius: 4,
+          maxBarThickness: 22,
+        }],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (ctx) { return formatValue(ctx.parsed.x); } } },
+        },
+        scales: {
+          x: { grid: { color: theme.grid }, ticks: { color: theme.text }, beginAtZero: true },
+          y: { grid: { display: false }, ticks: { color: theme.text } },
+        },
+      },
     });
   }
 
@@ -538,47 +602,52 @@ export const ADMIN_DASHBOARD_HTML = `<!doctype html>
 
       if (data.summary) renderTiles(data.summary);
       if (data.live) {
-        renderBarList(
-          "liveChannels",
+        renderBarChart(
+          "liveChannelsChart",
           (data.live.by_channel || []).map(function (row) { return { label: channelLabel(row), value: row.listeners }; }),
-          "지금 듣고 있는 사람이 없습니다.",
+          function (value) { return value + "명"; },
         );
         renderLiveTable(data.live.sessions || []);
       }
-      if (data.daily) renderDailyChart(data.daily.days || []);
+      if (data.daily) {
+        var days = data.daily.days || [];
+        var dayLabels = days.map(function (row) { return row.listen_date.slice(5); });
+        renderLineChart("dailyHoursChart", dayLabels, days.map(function (row) { return row.seconds / 3600; }), function (value) {
+          return formatHours(value * 3600);
+        });
+        renderLineChart("dailyListenersChart", dayLabels, days.map(function (row) { return row.listeners; }), function (value) {
+          return value + "명";
+        });
+      }
       if (data.visitors) renderVisitorsTable(data.visitors.visitors || []);
       if (data.byBroadcaster) {
-        renderBarList(
-          "byBroadcaster",
-          (data.byBroadcaster.broadcasters || []).map(function (row) { return { label: row.broadcaster, value: row.seconds }; }),
-          "데이터가 아직 없습니다.",
-          formatHours,
+        renderBarChart(
+          "byBroadcasterChart",
+          (data.byBroadcaster.broadcasters || []).map(function (row) { return { label: row.broadcaster, value: row.seconds / 3600 }; }),
+          function (value) { return formatHours(value * 3600); },
         );
       }
       if (data.byChannel) {
-        renderBarList(
-          "byChannel",
-          (data.byChannel.channels || []).map(function (row) { return { label: channelLabel(row), value: row.seconds }; }),
-          "데이터가 아직 없습니다.",
-          formatHours,
+        renderBarChart(
+          "byChannelChart",
+          (data.byChannel.channels || []).map(function (row) { return { label: channelLabel(row), value: row.seconds / 3600 }; }),
+          function (value) { return formatHours(value * 3600); },
         );
       }
       if (data.byRegion) {
-        renderBarList(
-          "byRegion",
-          (data.byRegion.regions || []).map(function (row) { return { label: row.region_group, value: row.seconds }; }),
-          "데이터가 아직 없습니다.",
-          formatHours,
+        renderBarChart(
+          "byRegionChart",
+          (data.byRegion.regions || []).map(function (row) { return { label: row.region_group, value: row.seconds / 3600 }; }),
+          function (value) { return formatHours(value * 3600); },
         );
       }
       if (data.byProgram) {
-        renderBarList(
-          "byProgram",
+        renderBarChart(
+          "byProgramChart",
           (data.byProgram.programs || []).map(function (row) {
-            return { label: (row.program_title || "제목 없음") + " · " + channelLabel(row), value: row.seconds };
+            return { label: (row.program_title || "제목 없음") + " · " + channelLabel(row), value: row.seconds / 3600 };
           }),
-          "데이터가 아직 없습니다.",
-          formatHours,
+          function (value) { return formatHours(value * 3600); },
         );
       }
       updatedAt.textContent = "업데이트: " + new Date().toLocaleTimeString("ko-KR");

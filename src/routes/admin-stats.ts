@@ -35,35 +35,64 @@ adminStats.get("/summary", async (context) => {
   const thresholdSeconds = liveThresholdSeconds(context);
   const liveSince = new Date(Date.now() - thresholdSeconds * 1000).toISOString();
   const todayKst = toKstDate();
+  const since7d = toKstDate(new Date(Date.now() - 6 * DAY_MS));
+  const since30d = toKstDate(new Date(Date.now() - 29 * DAY_MS));
+  const since365d = toKstDate(new Date(Date.now() - 364 * DAY_MS));
 
-  const [visitorsTotal, visitorsToday, currentlyOnline, currentlyListening, listenToday, listenAllTime] =
-    await Promise.all([
-      db.prepare("SELECT COUNT(*) AS value FROM visitors").first<{ value: number }>(),
-      db
-        .prepare(
-          `SELECT COUNT(DISTINCT visitor_id) AS value FROM visits
-           WHERE strftime('%Y-%m-%d', started_at, '+9 hours') = ?`,
-        )
-        .bind(todayKst)
-        .first<{ value: number }>(),
-      db
-        .prepare("SELECT COUNT(*) AS value FROM visits WHERE ended_at IS NULL AND last_seen_at >= ?")
-        .bind(liveSince)
-        .first<{ value: number }>(),
-      db
-        .prepare(
-          "SELECT COUNT(*) AS value FROM listen_sessions WHERE ended_at IS NULL AND last_heartbeat_at >= ?",
-        )
-        .bind(liveSince)
-        .first<{ value: number }>(),
-      db
-        .prepare("SELECT COALESCE(SUM(seconds), 0) AS value FROM visitor_daily_listen WHERE listen_date = ?")
-        .bind(todayKst)
-        .first<{ value: number }>(),
-      db
-        .prepare("SELECT COALESCE(SUM(duration_seconds), 0) AS value FROM listen_sessions")
-        .first<{ value: number }>(),
-    ]);
+  const [
+    visitorsTotal,
+    visitorsToday,
+    currentlyOnline,
+    currentlyListening,
+    listenToday,
+    listenAllTime,
+    listeners,
+  ] = await Promise.all([
+    db.prepare("SELECT COUNT(*) AS value FROM visitors").first<{ value: number }>(),
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT visitor_id) AS value FROM visits
+         WHERE strftime('%Y-%m-%d', started_at, '+9 hours') = ?`,
+      )
+      .bind(todayKst)
+      .first<{ value: number }>(),
+    db
+      .prepare("SELECT COUNT(*) AS value FROM visits WHERE ended_at IS NULL AND last_seen_at >= ?")
+      .bind(liveSince)
+      .first<{ value: number }>(),
+    db
+      .prepare(
+        "SELECT COUNT(*) AS value FROM listen_sessions WHERE ended_at IS NULL AND last_heartbeat_at >= ?",
+      )
+      .bind(liveSince)
+      .first<{ value: number }>(),
+    db
+      .prepare("SELECT COALESCE(SUM(seconds), 0) AS value FROM visitor_daily_listen WHERE listen_date = ?")
+      .bind(todayKst)
+      .first<{ value: number }>(),
+    db
+      .prepare("SELECT COALESCE(SUM(duration_seconds), 0) AS value FROM listen_sessions")
+      .first<{ value: number }>(),
+    // 실제로 재생을 한 번이라도 한 "청취자" 수를 기간별 고유 인원으로 센다(그냥 방문과는 다르다).
+    db
+      .prepare(
+        `SELECT
+           COUNT(DISTINCT CASE WHEN listen_date = ?1 THEN visitor_id END) AS today,
+           COUNT(DISTINCT CASE WHEN listen_date >= ?2 THEN visitor_id END) AS last_7_days,
+           COUNT(DISTINCT CASE WHEN listen_date >= ?3 THEN visitor_id END) AS last_30_days,
+           COUNT(DISTINCT CASE WHEN listen_date >= ?4 THEN visitor_id END) AS last_365_days,
+           COUNT(DISTINCT visitor_id) AS all_time
+         FROM visitor_daily_listen`,
+      )
+      .bind(todayKst, since7d, since30d, since365d)
+      .first<{
+        today: number;
+        last_7_days: number;
+        last_30_days: number;
+        last_365_days: number;
+        all_time: number;
+      }>(),
+  ]);
 
   return context.json({
     visitors_total: visitorsTotal?.value ?? 0,
@@ -72,6 +101,11 @@ adminStats.get("/summary", async (context) => {
     currently_listening: currentlyListening?.value ?? 0,
     listen_seconds_today_total: listenToday?.value ?? 0,
     listen_seconds_alltime_total: listenAllTime?.value ?? 0,
+    listeners_today: listeners?.today ?? 0,
+    listeners_last_7_days: listeners?.last_7_days ?? 0,
+    listeners_last_30_days: listeners?.last_30_days ?? 0,
+    listeners_last_365_days: listeners?.last_365_days ?? 0,
+    listeners_all_time: listeners?.all_time ?? 0,
     live_threshold_seconds: thresholdSeconds,
   });
 });
@@ -88,14 +122,14 @@ adminStats.get("/daily", async (context) => {
 
   const rows = await db
     .prepare(
-      `SELECT listen_date, SUM(seconds) AS seconds
+      `SELECT listen_date, SUM(seconds) AS seconds, COUNT(DISTINCT visitor_id) AS listeners
        FROM visitor_daily_listen
        WHERE listen_date >= ?
        GROUP BY listen_date
        ORDER BY listen_date ASC`,
     )
     .bind(sinceDate)
-    .all<{ listen_date: string; seconds: number }>();
+    .all<{ listen_date: string; seconds: number; listeners: number }>();
 
   return context.json({ days: rows.results });
 });

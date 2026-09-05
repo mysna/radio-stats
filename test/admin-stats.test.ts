@@ -138,6 +138,11 @@ describe("GET /v1/admin/stats/summary", () => {
     expect(body.currently_listening).toBe(1);
     expect(body.listen_seconds_today_total).toBe(40);
     expect(body.listen_seconds_alltime_total).toBe(130);
+    expect(body.listeners_today).toBe(1);
+    expect(body.listeners_last_7_days).toBe(2);
+    expect(body.listeners_last_30_days).toBe(2);
+    expect(body.listeners_last_365_days).toBe(2);
+    expect(body.listeners_all_time).toBe(2);
   });
 });
 
@@ -224,14 +229,16 @@ describe("GET /v1/admin/stats/by-program", () => {
 });
 
 describe("GET /v1/admin/stats/daily", () => {
-  it("는 사이트 전체 일별 청취 시간을 날짜 오름차순으로 반환한다", async () => {
+  it("는 사이트 전체 일별 청취 시간과 고유 청취자 수를 날짜 오름차순으로 반환한다", async () => {
     const response = await adminRequest("/v1/admin/stats/daily?days=30");
-    const body = (await response.json()) as { days: Array<{ listen_date: string; seconds: number }> };
+    const body = (await response.json()) as {
+      days: Array<{ listen_date: string; seconds: number; listeners: number }>;
+    };
 
     expect(response.status).toBe(200);
     expect(body.days).toEqual([
-      { listen_date: "2026-07-12", seconds: 90 },
-      { listen_date: "2026-07-13", seconds: 40 },
+      { listen_date: "2026-07-12", seconds: 90, listeners: 1 },
+      { listen_date: "2026-07-13", seconds: 40, listeners: 1 },
     ]);
   });
 });
