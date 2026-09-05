@@ -153,10 +153,16 @@ describe("listen events", () => {
     ({ visit_id: visitId } = (await response.json()) as { visit_id: string });
   });
 
-  it("는 청취 시작부터 종료까지 duration_seconds를 누적하고 일별 통계에 반영한다", async () => {
+  it("는 청취 시작부터 종료까지 duration_seconds를 누적하고 일별/프로그램별 통계에 반영한다", async () => {
     const startResponse = await request("/v1/events/listen/start", {
       method: "POST",
-      body: JSON.stringify({ visitor_id: visitorId, visit_id: visitId, channel_id: "kbs.1radio.seoul" }),
+      body: JSON.stringify({
+        visitor_id: visitorId,
+        visit_id: visitId,
+        channel_id: "kbs.1radio.seoul",
+        broadcaster: "kbs",
+        region_id: "seoul",
+      }),
     });
     expect(startResponse.status).toBe(201);
     const { session_id: sessionId } = (await startResponse.json()) as { session_id: string };
@@ -164,20 +170,20 @@ describe("listen events", () => {
     vi.setSystemTime(new Date("2026-07-13T10:00:20Z"));
     const heartbeat1 = await request("/v1/events/listen/heartbeat", {
       method: "POST",
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, program_id: "kbs.news.0900", program_title: "KBS 뉴스" }),
     });
     expect((await heartbeat1.json()) as { elapsed_seconds: number }).toMatchObject({ elapsed_seconds: 20 });
 
     vi.setSystemTime(new Date("2026-07-13T10:00:45Z"));
     await request("/v1/events/listen/heartbeat", {
       method: "POST",
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, program_id: "kbs.news.0900", program_title: "KBS 뉴스" }),
     });
 
     vi.setSystemTime(new Date("2026-07-13T10:01:00Z"));
     const endResponse = await request("/v1/events/listen/end", {
       method: "POST",
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, program_id: "kbs.news.0900", program_title: "KBS 뉴스" }),
     });
     expect(endResponse.status).toBe(200);
 
@@ -187,11 +193,19 @@ describe("listen events", () => {
 
     const daily = await db
       .prepare(
-        "SELECT seconds FROM visitor_daily_listen WHERE visitor_id = ? AND listen_date = ? AND channel_id = ?",
+        "SELECT seconds, broadcaster, region_id FROM visitor_daily_listen WHERE visitor_id = ? AND listen_date = ? AND channel_id = ?",
       )
       .bind(visitorId, "2026-07-13", "kbs.1radio.seoul")
-      .first<{ seconds: number }>();
-    expect(daily?.seconds).toBe(60);
+      .first<{ seconds: number; broadcaster: string; region_id: string }>();
+    expect(daily).toMatchObject({ seconds: 60, broadcaster: "kbs", region_id: "seoul" });
+
+    const programDaily = await db
+      .prepare(
+        "SELECT seconds, program_title FROM program_daily_listen WHERE listen_date = ? AND channel_id = ? AND program_key = ?",
+      )
+      .bind("2026-07-13", "kbs.1radio.seoul", "kbs.news.0900")
+      .first<{ seconds: number; program_title: string }>();
+    expect(programDaily).toMatchObject({ seconds: 60, program_title: "KBS 뉴스" });
 
     // 이미 종료된 세션에 다시 종료 이벤트가 와도(beacon 중복 등) 중복 집계하지 않는다.
     const secondEnd = await request("/v1/events/listen/end", {
@@ -221,6 +235,29 @@ describe("listen events", () => {
 
     const session = await listenSessionRow(sessionId);
     expect(session?.duration_seconds).toBe(120);
+  });
+
+  it("는 프로그램 정보가 없으면 unknown 키로 묶는다", async () => {
+    vi.setSystemTime(new Date("2026-07-13T12:00:00Z"));
+    const startResponse = await request("/v1/events/listen/start", {
+      method: "POST",
+      body: JSON.stringify({ visitor_id: visitorId, visit_id: visitId, channel_id: "ytn.radio" }),
+    });
+    const { session_id: sessionId } = (await startResponse.json()) as { session_id: string };
+
+    vi.setSystemTime(new Date("2026-07-13T12:00:30Z"));
+    await request("/v1/events/listen/end", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+
+    const programDaily = await db
+      .prepare(
+        "SELECT seconds FROM program_daily_listen WHERE listen_date = ? AND channel_id = ? AND program_key = 'unknown'",
+      )
+      .bind("2026-07-13", "ytn.radio")
+      .first<{ seconds: number }>();
+    expect(programDaily?.seconds).toBe(30);
   });
 
   it("는 다른 방문자의 visit_id로 청취 시작을 요청하면 404를 반환한다", async () => {

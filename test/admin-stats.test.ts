@@ -53,26 +53,42 @@ async function seed(): Promise<{ onlineVisitorId: string; staleVisitorId: string
       .bind(staleVisitId, staleVisitorId, staleHeartbeat, staleHeartbeat),
     db
       .prepare(
-        `INSERT INTO listen_sessions (id, visitor_id, visit_id, channel_id, started_at, last_heartbeat_at, duration_seconds)
-         VALUES (?, ?, ?, 'kbs.1radio.seoul', ?, ?, 40)`,
+        `INSERT INTO listen_sessions (
+           id, visitor_id, visit_id, channel_id, started_at, last_heartbeat_at, duration_seconds,
+           broadcaster, region_id, program_title
+         ) VALUES (?, ?, ?, 'kbs.1radio.seoul', ?, ?, 40, 'kbs', 'seoul', 'KBS 뉴스')`,
       )
       .bind(crypto.randomUUID(), onlineVisitorId, onlineVisitId, now, now),
     db
       .prepare(
-        `INSERT INTO listen_sessions (id, visitor_id, visit_id, channel_id, started_at, last_heartbeat_at, ended_at, duration_seconds)
-         VALUES (?, ?, ?, 'mbc.sfm.seoul', ?, ?, ?, 90)`,
+        `INSERT INTO listen_sessions (
+           id, visitor_id, visit_id, channel_id, started_at, last_heartbeat_at, ended_at, duration_seconds,
+           broadcaster, region_id
+         ) VALUES (?, ?, ?, 'mbc.sfm.busan', ?, ?, ?, 90, 'mbc', 'busan')`,
       )
       .bind(crypto.randomUUID(), staleVisitorId, staleVisitId, staleHeartbeat, staleHeartbeat, staleHeartbeat),
     db
       .prepare(
-        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, seconds) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, broadcaster, region_id, seconds)
+         VALUES (?, ?, ?, 'kbs', 'seoul', ?)`,
       )
       .bind(onlineVisitorId, "2026-07-13", "kbs.1radio.seoul", 40),
     db
       .prepare(
-        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, seconds) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO visitor_daily_listen (visitor_id, listen_date, channel_id, broadcaster, region_id, seconds)
+         VALUES (?, ?, ?, 'mbc', 'busan', ?)`,
       )
-      .bind(staleVisitorId, "2026-07-12", "mbc.sfm.seoul", 90),
+      .bind(staleVisitorId, "2026-07-12", "mbc.sfm.busan", 90),
+    db
+      .prepare(
+        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, seconds)
+         VALUES ('2026-07-13', 'kbs.1radio.seoul', 'kbs.news.0900', 'KBS 뉴스', 40)`,
+      ),
+    db
+      .prepare(
+        `INSERT INTO program_daily_listen (listen_date, channel_id, program_key, program_title, seconds)
+         VALUES ('2026-07-12', 'mbc.sfm.busan', 'unknown', NULL, 90)`,
+      ),
   ]);
 
   return { onlineVisitorId, staleVisitorId };
@@ -139,6 +155,57 @@ describe("GET /v1/admin/stats/live", () => {
       visitor_id: seeded.onlineVisitorId,
       channel_id: "kbs.1radio.seoul",
     });
+  });
+});
+
+describe("GET /v1/admin/stats/by-broadcaster", () => {
+  it("는 방송국별 누적 청취 시간을 내림차순으로 반환한다", async () => {
+    const response = await adminRequest("/v1/admin/stats/by-broadcaster");
+    const body = (await response.json()) as { broadcasters: Array<{ broadcaster: string; seconds: number }> };
+
+    expect(response.status).toBe(200);
+    expect(body.broadcasters).toEqual([
+      { broadcaster: "mbc", seconds: 90 },
+      { broadcaster: "kbs", seconds: 40 },
+    ]);
+  });
+});
+
+describe("GET /v1/admin/stats/by-channel", () => {
+  it("는 채널별 누적 청취 시간을 내림차순으로 반환한다", async () => {
+    const response = await adminRequest("/v1/admin/stats/by-channel");
+    const body = (await response.json()) as { channels: Array<{ channel_id: string; seconds: number }> };
+
+    expect(body.channels).toEqual([
+      { channel_id: "mbc.sfm.busan", seconds: 90 },
+      { channel_id: "kbs.1radio.seoul", seconds: 40 },
+    ]);
+  });
+});
+
+describe("GET /v1/admin/stats/by-region", () => {
+  it("는 수도권/지역 두 그룹으로만 묶어 반환한다", async () => {
+    const response = await adminRequest("/v1/admin/stats/by-region");
+    const body = (await response.json()) as { regions: Array<{ region_group: string; seconds: number }> };
+
+    expect(body.regions).toEqual([
+      { region_group: "지역", seconds: 90 },
+      { region_group: "수도권", seconds: 40 },
+    ]);
+  });
+});
+
+describe("GET /v1/admin/stats/by-program", () => {
+  it("는 채널×프로그램별 누적 청취 시간을 반환한다", async () => {
+    const response = await adminRequest("/v1/admin/stats/by-program");
+    const body = (await response.json()) as {
+      programs: Array<{ channel_id: string; program_key: string; program_title: string | null; seconds: number }>;
+    };
+
+    expect(body.programs).toEqual([
+      { channel_id: "mbc.sfm.busan", program_key: "unknown", program_title: null, seconds: 90 },
+      { channel_id: "kbs.1radio.seoul", program_key: "kbs.news.0900", program_title: "KBS 뉴스", seconds: 40 },
+    ]);
   });
 });
 
