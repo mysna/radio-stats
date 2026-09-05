@@ -19,6 +19,11 @@ describe("GET /admin", () => {
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(body).toContain("<title>라디오 통계 대시보드</title>");
   });
+
+  it("는 브라우저 캐시를 금지한다(배포 후 이전 버전이 계속 보이는 것을 방지)", async () => {
+    const response = await app.request("https://api.example.test/admin", undefined, {});
+    expect(response.headers.get("cache-control")).toContain("no-store");
+  });
 });
 
 describe("GET /admin/vendor/chart.js", () => {
