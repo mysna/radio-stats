@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 
+import { ADMIN_DASHBOARD_HTML } from "./admin-ui";
 import { createDatabase } from "./db";
 import { errorResponse } from "./errors";
 import adminStats from "./routes/admin-stats";
@@ -22,7 +23,9 @@ app.use("*", async (context, next) => {
   await next();
 });
 
-app.use("/v1/*", async (context, next) => {
+// 수집 API는 비밀값이 없으므로(정적 사이트 클라이언트라 감출 수 없다) CORS 허용 목록이
+// 실질적인 보호 장치다. 등록된 origin에서 온 요청만 받는다.
+app.use("/v1/events/*", async (context, next) => {
   const origin = context.req.header("Origin");
   if (!origin) {
     await next();
@@ -40,8 +43,8 @@ app.use("/v1/*", async (context, next) => {
 
   if (context.req.method === "OPTIONS") {
     return context.newResponse(null, 204, {
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, If-None-Match",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Origin": origin,
       Vary: "Origin",
     });
@@ -52,7 +55,29 @@ app.use("/v1/*", async (context, next) => {
   context.header("Vary", "Origin", { append: true });
 });
 
+// 관리자 API는 ADMIN_TOKEN(Bearer)이 실제 보호 장치이므로 origin은 허용 목록으로
+// 제한하지 않는다 — 같은 Worker가 서비스하는 /admin 대시보드 페이지가 같은 origin으로
+// 호출하므로 오히려 어떤 origin이든 요청 자체를 막지 않는 쪽이 단순하고 안전하다.
+app.use("/v1/admin/*", async (context, next) => {
+  const origin = context.req.header("Origin");
+  if (context.req.method === "OPTIONS") {
+    return context.newResponse(null, 204, {
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Origin": origin ?? "*",
+      Vary: "Origin",
+    });
+  }
+
+  await next();
+  if (origin) {
+    context.header("Access-Control-Allow-Origin", origin);
+    context.header("Vary", "Origin", { append: true });
+  }
+});
+
 app.get("/health", (context) => context.json({ service: "radio-stats" }));
+app.get("/admin", (context) => context.html(ADMIN_DASHBOARD_HTML));
 app.route("/v1/events", events);
 app.route("/v1/admin/stats", adminStats);
 

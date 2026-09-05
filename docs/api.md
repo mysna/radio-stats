@@ -107,6 +107,14 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 }
 ```
 
+### `GET /v1/admin/stats/daily?days=30`
+
+사이트 전체(모든 방문자 합산) 일별 청취 시간 추이. 오래된 날짜부터 최신순.
+
+```json
+{ "days": [{ "listen_date": "2026-07-01", "seconds": 12345 }, ...] }
+```
+
 ### `GET /v1/admin/stats/visitors?limit=50&offset=0`
 
 방문자별 요약 목록(최근 방문순).
@@ -114,3 +122,9 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 ### `GET /v1/admin/stats/visitors/:id`
 
 방문자 상세: 기본 정보, 최근 방문/청취 세션, 날짜별 청취 시간, 채널별 청취 시간.
+
+## 대시보드 — `GET /admin`
+
+브라우저로 열면 되는 통계 대시보드 페이지. Worker가 직접 서빙하며 별도 배포가 필요
+없다. 최초 접속 시 `ADMIN_TOKEN`을 입력하면 브라우저 `localStorage`에 저장해두고
+같은 origin으로 위 관리자 API들을 호출한다.

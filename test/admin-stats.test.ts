@@ -142,6 +142,19 @@ describe("GET /v1/admin/stats/live", () => {
   });
 });
 
+describe("GET /v1/admin/stats/daily", () => {
+  it("는 사이트 전체 일별 청취 시간을 날짜 오름차순으로 반환한다", async () => {
+    const response = await adminRequest("/v1/admin/stats/daily?days=30");
+    const body = (await response.json()) as { days: Array<{ listen_date: string; seconds: number }> };
+
+    expect(response.status).toBe(200);
+    expect(body.days).toEqual([
+      { listen_date: "2026-07-12", seconds: 90 },
+      { listen_date: "2026-07-13", seconds: 40 },
+    ]);
+  });
+});
+
 describe("GET /v1/admin/stats/visitors", () => {
   it("는 방문자별 누적 청취시간을 포함해 목록을 반환한다", async () => {
     const response = await adminRequest("/v1/admin/stats/visitors?limit=10");
