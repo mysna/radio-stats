@@ -119,14 +119,14 @@ adminStats.get("/by-channel", async (context) => {
   const limit = Math.min(Math.max(Number(context.req.query("limit")) || DEFAULT_VISITOR_LIST_LIMIT, 1), MAX_VISITOR_LIST_LIMIT);
   const rows = await db
     .prepare(
-      `SELECT channel_id, SUM(seconds) AS seconds
+      `SELECT channel_id, MAX(channel_name) AS channel_name, SUM(seconds) AS seconds
        FROM visitor_daily_listen
        GROUP BY channel_id
        ORDER BY seconds DESC
        LIMIT ?`,
     )
     .bind(limit)
-    .all<{ channel_id: string; seconds: number }>();
+    .all<{ channel_id: string; channel_name: string | null; seconds: number }>();
   return context.json({ channels: rows.results });
 });
 
@@ -151,14 +151,20 @@ adminStats.get("/by-program", async (context) => {
   const limit = Math.min(Math.max(Number(context.req.query("limit")) || DEFAULT_VISITOR_LIST_LIMIT, 1), MAX_VISITOR_LIST_LIMIT);
   const rows = await db
     .prepare(
-      `SELECT channel_id, program_key, MAX(program_title) AS program_title, SUM(seconds) AS seconds
+      `SELECT channel_id, MAX(channel_name) AS channel_name, program_key, MAX(program_title) AS program_title, SUM(seconds) AS seconds
        FROM program_daily_listen
        GROUP BY channel_id, program_key
        ORDER BY seconds DESC
        LIMIT ?`,
     )
     .bind(limit)
-    .all<{ channel_id: string; program_key: string; program_title: string | null; seconds: number }>();
+    .all<{
+      channel_id: string;
+      channel_name: string | null;
+      program_key: string;
+      program_title: string | null;
+      seconds: number;
+    }>();
   return context.json({ programs: rows.results });
 });
 
@@ -166,6 +172,7 @@ interface LiveSessionRow {
   session_id: string;
   visitor_id: string;
   channel_id: string;
+  channel_name: string | null;
   started_at: string;
   duration_seconds: number;
   country: string | null;
@@ -185,18 +192,18 @@ adminStats.get("/live", async (context) => {
   const [byChannel, sessions] = await Promise.all([
     db
       .prepare(
-        `SELECT channel_id, COUNT(*) AS listeners
+        `SELECT channel_id, MAX(channel_name) AS channel_name, COUNT(*) AS listeners
          FROM listen_sessions
          WHERE ended_at IS NULL AND last_heartbeat_at >= ?
          GROUP BY channel_id
          ORDER BY listeners DESC`,
       )
       .bind(liveSince)
-      .all<{ channel_id: string; listeners: number }>(),
+      .all<{ channel_id: string; channel_name: string | null; listeners: number }>(),
     db
       .prepare(
         `SELECT
-           ls.id AS session_id, ls.visitor_id, ls.channel_id, ls.started_at, ls.duration_seconds,
+           ls.id AS session_id, ls.visitor_id, ls.channel_id, ls.channel_name, ls.started_at, ls.duration_seconds,
            ls.broadcaster, ls.region_id, ls.program_title,
            v.country, v.browser, v.os, v.device_type
          FROM listen_sessions ls
@@ -282,7 +289,7 @@ adminStats.get("/visitors/:id", async (context) => {
       .all(),
     db
       .prepare(
-        `SELECT id, channel_id, started_at, last_heartbeat_at, ended_at, duration_seconds
+        `SELECT id, channel_id, channel_name, started_at, last_heartbeat_at, ended_at, duration_seconds
          FROM listen_sessions WHERE visitor_id = ? ORDER BY started_at DESC LIMIT 50`,
       )
       .bind(visitorId)
@@ -297,7 +304,7 @@ adminStats.get("/visitors/:id", async (context) => {
       .all(),
     db
       .prepare(
-        `SELECT channel_id, SUM(seconds) AS seconds
+        `SELECT channel_id, MAX(channel_name) AS channel_name, SUM(seconds) AS seconds
          FROM visitor_daily_listen WHERE visitor_id = ?
          GROUP BY channel_id ORDER BY seconds DESC`,
       )

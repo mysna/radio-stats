@@ -45,6 +45,7 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
   "visitor_id": "<uuid>",
   "visit_id": "<uuid>",
   "channel_id": "kbs.1radio.seoul",
+  "channel_name": "KBS 1라디오",
   "broadcaster": "kbs",
   "region_id": "seoul",
   "program_id": "kbs.news.0900",
@@ -52,8 +53,10 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 }
 ```
 
-- `broadcaster`/`region_id`/`program_id`/`program_title`은 모두 선택 필드. 방송국별/
-  채널별/지역별/프로그램별 통계에 쓰인다.
+- `channel_name`/`broadcaster`/`region_id`/`program_id`/`program_title`은 모두 선택
+  필드. `channel_id`는 "seoul-011-sbs-lovefm-main"처럼 내부 식별자라서, 화면에 보여줄
+  이름("SBS 러브FM")은 `channel_name`으로 따로 받는다. 방송국별/채널별/지역별/프로그램별
+  통계에 쓰인다.
 - 응답 `201`: `{ "session_id": "<uuid>" }`.
 
 ### `POST /v1/events/listen/heartbeat`
@@ -103,12 +106,13 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 ```json
 {
   "live_threshold_seconds": 90,
-  "by_channel": [{ "channel_id": "kbs.1radio.seoul", "listeners": 5 }],
+  "by_channel": [{ "channel_id": "kbs.1radio.seoul", "channel_name": "KBS 1라디오", "listeners": 5 }],
   "sessions": [
     {
       "session_id": "...",
       "visitor_id": "...",
       "channel_id": "kbs.1radio.seoul",
+      "channel_name": "KBS 1라디오",
       "started_at": "...",
       "duration_seconds": 320,
       "country": "KR",
@@ -130,7 +134,7 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 
 ### `GET /v1/admin/stats/by-channel?limit=50`
 
-채널(`channel_id`)별 누적 청취 시간(전체 기간), 내림차순.
+채널(`channel_id`)별 누적 청취 시간(전체 기간), 내림차순. `channel_name`을 함께 반환한다.
 
 ### `GET /v1/admin/stats/by-region`
 
@@ -146,7 +150,7 @@ CORS는 `CORS_ORIGINS`에 등록된 origin만 허용한다. 모든 오류는
 `program_key: "unknown"`으로 묶인다.
 
 ```json
-{ "programs": [{ "channel_id": "kbs.1radio.seoul", "program_key": "kbs.news.0900", "program_title": "KBS 뉴스", "seconds": 3600 }] }
+{ "programs": [{ "channel_id": "kbs.1radio.seoul", "channel_name": "KBS 1라디오", "program_key": "kbs.news.0900", "program_title": "KBS 뉴스", "seconds": 3600 }] }
 ```
 
 ### `GET /v1/admin/stats/daily?days=30`
