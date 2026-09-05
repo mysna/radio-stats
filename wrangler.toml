@@ -1,0 +1,11 @@
+name = "radio-stats"
+main = "src/index.ts"
+compatibility_date = "2026-07-13"
+
+[vars]
+CORS_ORIGINS = "https://radio.bsod.kr,https://mysna.github.io,http://localhost:8000"
+# 방문자를 "접속 중"으로 볼 하트비트 유효 시간(초). 클라이언트 하트비트 주기보다 넉넉히 크게 둔다.
+LIVE_THRESHOLD_SECONDS = "90"
+# Turso 프로젝트의 DB URL (turso db show radio-stats --url). 토큰은 비밀값이므로
+# 여기 두지 말고 `wrangler secret put TURSO_AUTH_TOKEN`으로 등록한다.
+TURSO_DATABASE_URL = "libsql://radio-stats-mysna.aws-ap-northeast-1.turso.io"
